@@ -19,7 +19,8 @@ typedef enum {
     XDRBATCHEM=7, //unused
     XDRGEAR=8, //unused
     XDRBAT=9,
-    XDRENGINE=10
+    XDRENGINE=10,
+    XDRATTITUDE=11
 } GwXDRCategory;
 class GwXDRType{
     public:
@@ -36,6 +37,7 @@ class GwXDRType{
         GENERIC=9,
         DISPLACEMENT=10,
         RPM=11,
+        DISPLACEMENTD=12,
         UNKNOWN=99
     }TypeCode;
     typedef double (* convert)(double);
@@ -181,7 +183,7 @@ class GwXDRFoundMapping : public GwBoatItemNameProvider{
             return String("xdr")+getTransducerName();
         };
         virtual String getBoatItemFormat(){
-            return "formatXdr"+type->xdrunit; //TODO: use the type def for the correct format
+            return "formatXdr:"+type->xdrtype+":"+type->xdrunit; 
         };
         virtual ~GwXDRFoundMapping(){}
 };
