@@ -401,15 +401,19 @@ private:
         tN2kMsg n2kMsg;
         tN2kWindReference n2kRef;
         bool shouldSend=false;
-        WindAngle=formatDegToRad(WindAngle);
         switch(Reference){
             case NMEA0183Wind_Apparent:
+                WindAngle+=(double)287;
+                while(WindAngle>360) {WindAngle-=360;}
+                while(WindAngle<0) {WindAngle+=360;}
+                WindAngle=formatDegToRad(WindAngle);
                 n2kRef=N2kWind_Apparent;
                 shouldSend=updateDouble(boatData->AWA,WindAngle,msg.sourceId) && 
                     updateDouble(boatData->AWS,WindSpeed,msg.sourceId);
                 if (WindSpeed != NMEA0183DoubleNA) boatData->MaxAws->updateMax(WindSpeed);    
                 break;
             case NMEA0183Wind_True:
+                WindAngle=formatDegToRad(WindAngle);
                 n2kRef=N2kWind_True_North;
                 shouldSend=updateDouble(boatData->TWD,WindAngle,msg.sourceId) && 
                     updateDouble(boatData->TWS,WindSpeed,msg.sourceId);
