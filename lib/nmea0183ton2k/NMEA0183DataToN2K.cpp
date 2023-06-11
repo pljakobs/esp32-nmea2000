@@ -403,7 +403,7 @@ private:
         bool shouldSend=false;
         switch(Reference){
             case NMEA0183Wind_Apparent:
-                WindAngle+=(double)287;
+                WindAngle+=(double)180;
                 while(WindAngle>360) {WindAngle-=360;}
                 while(WindAngle<0) {WindAngle+=360;}
                 WindAngle=formatDegToRad(WindAngle);
