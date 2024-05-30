@@ -32,6 +32,7 @@
 
 
 
+
 N2kDataToNMEA0183::N2kDataToNMEA0183(GwLog * logger, GwBoatData *boatData, 
   SendNMEA0183MessageCallback callback, String talkerId) 
     {
@@ -470,6 +471,65 @@ private:
 
     //*****************************************************************************
     void HandleWind(const tN2kMsg &N2kMsg)
+    /*
+     * Stuff needed to drive the Raymarine ST1000/2000:
+
+        Information NMEA 0183 data
+        Cross Track Error APB, APA,RMB, XTE, XTR
+        Bearing to Waypoint APB, BPI, BWR, BWC, BER, BEC, RMB
+        Distance to Waypoint WDR, WDC, BPI, BWR, BWC, BER, BEC,
+        RMB
+        Waypoint Number APA, APB,BPI, BWR, WDR, BWC, WDC,
+        RMB, BOD, WCV, BER, BEC
+        Speed Through Water VHW
+        Apparent Wind Angle and Speed VWR
+
+        Cross Track Error:
+        APB: (from 127237, 129284, 129283)
+        APA:
+        RMB: (129284)
+        XTE: (129283)
+        XTR:
+
+        Bearing to Waypoint:
+        APB
+        BPI:
+        BWR:
+        BWC:
+        BER:
+        BEC:
+        RMB: (129284)
+
+        BOD:
+
+
+
+        VWR - $IIVWR,045.0,L,12.6,N,6.5,M,23.3,K*52
+
+Fields:
+
+    Wind speed, in knots
+    Wind speed units, T = true
+    Wind direction, in degrees true
+    Wind direction reference, M = magnetic
+    Wind direction, in degrees magnetic
+    Wind direction reference, N = true
+    Status, A = data valid
+    V = wind speed and direction invalid
+
+Notes:
+
+    If the wind direction reference is magnetic, the wind direction is relative to magnetic north. If the wind direction reference is true, the wind direction is relative to true north.
+    If the status field is blank, the data is invalid. If the status field is A, the data is valid."
+
+        045.0 wind Angle
+        L = left handed, wind from the left and Wind Angle <180°
+
+        12.6,N - wind speed in knots
+        6.5,M - wind speed in m/s
+        23.3,K - wind speed in km/h
+        
+    */
     {
         unsigned char SID;
         tN2kWindReference WindReference;
@@ -1054,7 +1114,7 @@ private:
         }
         if (!updateDouble(boatData->ROT,ROT)) return;
         tNMEA0183Msg nmeamsg;
-        if (NMEA0183SetROT(nmeamsg,ROT * ROT_WA_FACTOR,talkerId)){
+        if (NMEA0183SetROT(nmeamsg,ROT,talkerId)){
             SendMessage(nmeamsg);
         }
     }
