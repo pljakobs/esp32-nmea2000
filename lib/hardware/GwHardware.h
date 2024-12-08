@@ -162,6 +162,14 @@
 #define GWBUTTON_PULLUPDOWN 
 #endif
 
+#ifdef BOARD_PJ
+  #define ESP32_CAN_RX_PIN GPIO_NUM_17
+  #define ESP32_CAN_TX_PIN GPIO_NUM_16
+  #define GWSERIAL_RX GPIO_NUM_35
+  #define GWSERIAL_TYPE GWSERIAL_TYPE_RX
+#endif
+
+
 #include "GwM5Base.h"
 #include "GwM5Grove.h"
 
@@ -228,5 +236,6 @@
 #else
   CFG_INIT(ledBrightness,"64",HIDDEN)
 #endif
+
 
 #endif
