@@ -1,4 +1,5 @@
 #include "GwSerial.h"
+#include "GwHardware.h"
 
 class GwSerialStream: public Stream{
     private:
@@ -40,11 +41,13 @@ class GwSerialStream: public Stream{
 
 
 
-GwSerial::GwSerial(GwLog *logger, Stream *s, int id,bool allowRead):serial(s)
+GwSerial::GwSerial(GwLog *logger, Stream * stream,int id,int type,bool allowRead)
 {
     LOG_DEBUG(GwLog::DEBUG,"creating GwSerial %p id %d",this,id);
-    this->id=id;
     this->logger = logger;
+    this->id=id;
+    this->stream=stream;
+    this->type=type;
     String bufName="Ser(";
     bufName+=String(id);
     bufName+=")";
@@ -60,6 +63,21 @@ GwSerial::~GwSerial()
 {
     delete buffer;
     if (readBuffer) delete readBuffer;
+    if (lock != nullptr) vSemaphoreDelete(lock);
+}
+
+String GwSerial::getMode(){
+    switch (type){
+        case GWSERIAL_TYPE_UNI:
+            return "UNI";
+        case GWSERIAL_TYPE_BI:
+            return "BI";
+        case GWSERIAL_TYPE_RX:
+            return "RX";
+        case GWSERIAL_TYPE_TX:
+            return "TX";
+    }
+    return "UNKNOWN";
 }
 
 bool GwSerial::isInitialized() { return initialized; }
@@ -70,10 +88,14 @@ size_t GwSerial::enqueue(const uint8_t *data, size_t len, bool partial)
 }
 GwBuffer::WriteStatus GwSerial::write(){
     if (! isInitialized()) return GwBuffer::ERROR;
-    size_t numWrite=serial->availableForWrite();          
-    size_t rt=buffer->fetchData(numWrite,[](uint8_t *buffer,size_t len, void *p){
-        return ((GwSerial *)p)->serial->write(buffer,len);
-    },this);
+    size_t rt=0;
+    {
+        GWSYNCHRONIZED(lock);
+        size_t numWrite=availableForWrite();          
+        rt=buffer->fetchData(numWrite,[](uint8_t *buffer,size_t len, void *p){
+            return ((GwSerial *)p)->stream->write(buffer,len);
+        },this);
+    }
     if (rt != 0){
         LOG_DEBUG(GwLog::DEBUG+1,"Serial %d write %d",id,rt);
     }
@@ -93,11 +115,11 @@ void GwSerial::loop(bool handleRead,bool handleWrite){
     write();
     if (! isInitialized()) return;
     if (! handleRead) return;
-    size_t available=serial->available();
+    size_t available=stream->available();
     if (! available) return;
     if (allowRead){
         size_t rd=readBuffer->fillData(available,[](uint8_t *buffer, size_t len, void *p)->size_t{
-            return ((GwSerial *)p)->serial->readBytes(buffer,len);
+            return ((GwSerial *)p)->stream->readBytes(buffer,len);
         },this);
         if (rd != 0){
             LOG_DEBUG(GwLog::DEBUG+2,"GwSerial %d read %d bytes",id,rd);
@@ -106,7 +128,7 @@ void GwSerial::loop(bool handleRead,bool handleWrite){
     else{
         uint8_t buffer[10];
         if (available > 10) available=10;
-        serial->readBytes(buffer,available);
+        stream->readBytes(buffer,available);
     }
 }
 void GwSerial::readMessages(GwMessageFetcher *writer){
@@ -115,10 +137,11 @@ void GwSerial::readMessages(GwMessageFetcher *writer){
     writer->handleBuffer(readBuffer);
 }
 
-bool GwSerial::flush(long max){
+bool GwSerial::flush(){
    if (! isInitialized()) return false;
+   long max=getFlushTimeout();
    if (! availableWrite) {
-    if ( serial->availableForWrite() < 1){
+    if ( availableForWrite() < 1){
         return false;
     }
     availableWrite=true;
@@ -128,7 +151,7 @@ bool GwSerial::flush(long max){
         if (write() != GwBuffer::AGAIN) return true;
         vTaskDelay(1);
    }
-   availableWrite=(serial->availableForWrite() > 0);
+   availableWrite=(availableForWrite() > 0);
    return false;
 }
 Stream * GwSerial::getStream(bool partialWrite){

@@ -15,11 +15,9 @@
     #include <Adafruit_BME280.h>
 #endif
 #ifdef _GWBME280
-#define TYPE "BME280"
-#define PRFX1 TYPE "11"
-#define PRFX2 TYPE "12"
-#define PRFX3 TYPE "21"
-#define PRFX4 TYPE "22"
+
+class BME280Config;
+static GwSensorConfigInitializerList<BME280Config> configs;
 class BME280Config : public IICSensorBase{
     public:
     bool prAct=true;
@@ -35,7 +33,7 @@ class BME280Config : public IICSensorBase{
     float prOff=0;
     Adafruit_BME280 *device=nullptr;
     uint32_t sensorId=-1;
-    BME280Config(GwApi * api, const String &prfx):SensorBase(TYPE,api,prfx){
+    BME280Config(GwApi * api, const String &prfx):IICSensorBase(api,prfx){
         }
     virtual bool isActive(){return prAct||huAct||tmAct;}
     virtual bool initDevice(GwApi *api,TwoWire *wire){
@@ -57,7 +55,6 @@ class BME280Config : public IICSensorBase{
     virtual bool preinit(GwApi * api){
         GwLog *logger=api->getLogger();
         LOG_DEBUG(GwLog::LOG,"%s configured",prefix.c_str());
-        api->addCapability(prefix,"true");
         addPressureXdr(api,*this);
         addTempXdr(api,*this);
         addHumidXdr(api,*this);
@@ -68,16 +65,20 @@ class BME280Config : public IICSensorBase{
         if (!device)
             return;
         GwLog *logger = api->getLogger();
+        float pressure = N2kDoubleNA;
+        float temperature = N2kDoubleNA;
+        float humidity = N2kDoubleNA;
+        float computed = N2kDoubleNA;
         if (prAct)
         {
-            float pressure = device->readPressure();
-            float computed = pressure + prOff;
+            pressure = device->readPressure();
+            computed = pressure + prOff;
             LOG_DEBUG(GwLog::DEBUG, "%s measure %2.0fPa, computed %2.0fPa", prefix.c_str(), pressure, computed);
             sendN2kPressure(api, *this, computed, counterId);
         }
         if (tmAct)
         {
-            float temperature = device->readTemperature(); // offset is handled internally
+            temperature = device->readTemperature(); // offset is handled internally
             temperature = CToKelvin(temperature);
             LOG_DEBUG(GwLog::DEBUG, "%s measure temp=%2.1f", prefix.c_str(), temperature);
             sendN2kTemperature(api, *this, temperature, counterId);
@@ -88,96 +89,85 @@ class BME280Config : public IICSensorBase{
             LOG_DEBUG(GwLog::DEBUG, "%s read humid=%02.0f", prefix.c_str(), humidity);
             sendN2kHumidity(api, *this, humidity, counterId);
         }
+        if (tmAct || prAct || (huAct && sensorId == 0x60))
+        {
+            sendN2kEnvironmentalParameters(api, *this, temperature, humidity, computed,counterId);
+        }
     }
-    #define CFG280(prefix) \
-        CFG_GET(prAct,prefix); \
-        CFG_GET(tmAct,prefix);\
-        CFG_GET(huAct,prefix);\
-        CFG_GET(tmSrc,prefix);\
-        CFG_GET(huSrc,prefix);\
-        CFG_GET(iid,prefix);\
-        CFG_GET(intv,prefix);\
-        CFG_GET(tmNam,prefix);\
-        CFG_GET(huNam,prefix);\
-        CFG_GET(prNam,prefix);\
-        CFG_GET(tmOff,prefix);\
-        CFG_GET(prOff,prefix);
+    
 
     virtual void readConfig(GwConfigHandler *cfg) override
     {
         if (ok) return;
-        if (prefix == PRFX1)
-        {
-            busId = 1;
-            addr = 0x76;
-            CFG280(BME28011);
-            ok=true;
-        }
-        if (prefix == PRFX2)
-        {
-            busId = 1;
-            addr = 0x77;
-            CFG280(BME28012);
-            ok=true;
-        }
-        if (prefix == PRFX3)
-        {
-            busId = 2;
-            addr = 0x76;
-            CFG280(BME28021);
-            ok=true;
-        }
-        if (prefix == PRFX4)
-        {
-            busId = 2;
-            addr = 0x77;
-            CFG280(BME28022);
-        }
-        intv *= 1000;
+        configs.readConfig(this,cfg);       
     }
 };
 
-static IICSensorBase::Creator creator([](GwApi *api, const String &prfx){
+
+static SensorBase::Creator creator([](GwApi *api, const String &prfx){
     return new BME280Config(api,prfx);
 });
-IICSensorBase::Creator registerBME280(GwApi *api,IICSensorList &sensors){
-    #if defined(GWBME280) || defined(GWBME28011)
+SensorBase::Creator registerBME280(GwApi *api){
+#if defined(GWBME280) || defined(GWBME28011)
     {
-        auto *cfg=creator(api,PRFX1);
-        sensors.add(api,cfg);
+        api->addSensor(creator(api,"BME28011"));
         CHECK_IIC1();
         #pragma message "GWBME28011 defined"
     }
-    #endif
-    #if defined(GWBME28012)
+#endif
+#if defined(GWBME28012)
     {
-        auto *cfg=creator(api,PRFX2);
-        sensors.add(api,cfg);
+        api->addSensor(creator(api,"BME28012"));
         CHECK_IIC1();
         #pragma message "GWBME28012 defined"
     }
-    #endif
-    #if defined(GWBME28021)
+#endif
+#if defined(GWBME28021)
     {
-        auto *cfg=creator(api,PRFX3);
-        sensors.add(api,cfg);
+        api->addSensor(creator(api,"BME28021"));
         CHECK_IIC2();
         #pragma message "GWBME28021 defined"
     }
-    #endif
-    #if defined(GWBME28022)
+#endif
+#if defined(GWBME28022)
     {
-        auto *cfg=creator(api,PRFX4);
-        sensors.add(api,cfg);
+        api->addSensor(creator(api,"BME28022"));
         CHECK_IIC1();
         #pragma message "GWBME28022 defined"
     }
-    #endif
+#endif
     return creator;
 }
+
+#define CFG280(s, prefix, bus, baddr) \
+    CFG_SGET(s, prAct, prefix);       \
+    CFG_SGET(s, tmAct, prefix);       \
+    CFG_SGET(s, huAct, prefix);       \
+    CFG_SGET(s, tmSrc, prefix);       \
+    CFG_SGET(s, huSrc, prefix);       \
+    CFG_SGET(s, iid, prefix);         \
+    CFG_SGET(s, intv, prefix);        \
+    CFG_SGET(s, tmNam, prefix);       \
+    CFG_SGET(s, huNam, prefix);       \
+    CFG_SGET(s, prNam, prefix);       \
+    CFG_SGET(s, tmOff, prefix);       \
+    CFG_SGET(s, prOff, prefix);       \
+    s->busId = bus;                   \
+    s->addr = baddr;                  \
+    s->ok = true;                     \
+    s->intv *= 1000;
+
+#define SCBME280(list, prefix, bus, addr) \
+    GWSENSORCONFIG(list, BME280Config, prefix, [](BME280Config *s, GwConfigHandler *cfg) { CFG280(s, prefix, bus, addr); });
+
+SCBME280(configs,BME28011,1,0x76);
+SCBME280(configs,BME28012,1,0x77);
+SCBME280(configs,BME28021,2,0x76);
+SCBME280(configs,BME28022,2,0x77);
+
 #else
-IICSensorBase::Creator registerBME280(GwApi *api,IICSensorList &sensors){ 
-    return IICSensorBase::Creator(); 
+SensorBase::Creator registerBME280(GwApi *api){ 
+    return SensorBase::Creator(); 
 }
 
 #endif

@@ -138,7 +138,7 @@ bool fixedApPass=true;
 #endif
 GwWifi gwWifi(&config,&logger,fixedApPass);
 GwChannelList channels(&logger,&config);
-GwBoatData boatData(&logger);
+GwBoatData boatData(&logger,&config);
 GwXDRMappings xdrMappings(&logger,&config);
 bool sendOutN2k=true;
 
@@ -235,17 +235,17 @@ void SendNMEA0183Message(const tNMEA0183Msg &NMEA0183Msg, int sourceId,bool conv
 class CalibrationValues {
   using Map=std::map<String,double>;
   Map values;
-  SemaphoreHandle_t lock;
+  SemaphoreHandle_t lock=nullptr;
   public:
     CalibrationValues(){
       lock=xSemaphoreCreateMutex();
     }
     void set(const String &name,double value){
-      GWSYNCHRONIZED(&lock);
+      GWSYNCHRONIZED(lock);
       values[name]=value;
     }
     bool get(const String &name, double &value){
-      GWSYNCHRONIZED(&lock);
+      GWSYNCHRONIZED(lock);
       auto it=values.find(name);
       if (it==values.end()) return false;
       value=it->second;
@@ -348,6 +348,8 @@ public:
     }
     return xdrMappings.addFixedMapping(mapping);
   }
+  virtual void registerRequestHandler(const String &url,HandlerFunction handler){
+  }
   virtual void addCapability(const String &name, const String &value){}
   virtual bool addUserTask(GwUserTaskFunction task,const String Name, int stackSize=2000){
     return false;
@@ -371,7 +373,7 @@ bool delayedRestart(){
   },"reset",2000,&logger,0,NULL) == pdPASS;
 }
 ApiImpl *apiImpl=new ApiImpl(MIN_USER_TASK);
-GwUserCode userCodeHandler(apiImpl,&mainLock);
+GwUserCode userCodeHandler(apiImpl);
 
 #define JSON_OK "{\"status\":\"OK\"}"
 #define JSON_INVALID_PASS F("{\"status\":\"invalid password\"}")
@@ -768,6 +770,7 @@ void loopFunction(void *){
     //delay(1);
   }
 }
+const String USERPREFIX="/api/user/";
 void setup() {
   mainLock=xSemaphoreCreateMutex();
   uint8_t chipid[6];
@@ -784,6 +787,8 @@ void setup() {
     logger.prefix="FALLBACK:";
   logger.setWriter(new DefaultLogWriter());
 #endif
+  boatData.begin();
+  userCodeHandler.begin(mainLock);
   userCodeHandler.startInitTasks(MIN_USER_TASK);
   channels.preinit();
   config.stopChanges();
@@ -844,13 +849,18 @@ void setup() {
                               snprintf(buffer,29,"%g",value);
                               buffer[29]=0;
                               request->send(200,"text/plain",buffer);    
-  });                                                        
+  });
+  webserver.registerHandler((USERPREFIX+"*").c_str(),[](AsyncWebServerRequest *req){
+                              String turl=req->url().substring(USERPREFIX.length());
+                              logger.logDebug(GwLog::DEBUG,"user web request for %s",turl.c_str());
+                              userCodeHandler.handleWebRequest(turl,req);
+  });
 
   webserver.begin();
   xdrMappings.begin();
   logger.flush();
   GwConverterConfig converterConfig;
-  converterConfig.init(&config);
+  converterConfig.init(&config,&logger);
   nmea0183Converter= N2kDataToNMEA0183::create(&logger, &boatData, 
     [](const tNMEA0183Msg &msg, int sourceId){
       SendNMEA0183Message(msg,sourceId,false);
@@ -928,7 +938,7 @@ void setup() {
   logger.logDebug(GwLog::LOG,"starting addon tasks");
   logger.flush();
   {
-    GWSYNCHRONIZED(&mainLock);
+    GWSYNCHRONIZED(mainLock);
     userCodeHandler.startUserTasks(MIN_USER_TASK);
   }
   timers.addAction(HEAP_REPORT_TIME,[](){
@@ -958,7 +968,7 @@ void handleSendAndRead(bool handleRead){
 void loopRun() {
   //logger.logDebug(GwLog::DEBUG,"main loop start");
   monitor.reset();
-  GWSYNCHRONIZED(&mainLock);
+  GWSYNCHRONIZED(mainLock);
   logger.flush();
   monitor.setTime(1);
   gwWifi.loop();
