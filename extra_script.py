@@ -7,6 +7,11 @@ import inspect
 import json
 import glob
 from datetime import datetime
+import re
+import pprint
+from platformio.project.config import ProjectConfig
+
+
 Import("env")
 #print(env.Dump())
 OWN_FILE="extra_script.py"
@@ -14,8 +19,11 @@ GEN_DIR='lib/generated'
 CFG_FILE='web/config.json'
 XDR_FILE='web/xdrconfig.json'
 CFG_INCLUDE='GwConfigDefinitions.h'
+CFG_INCLUDE_IMPL='GwConfigDefImpl.h'
 XDR_INCLUDE='GwXdrTypeMappings.h'
 TASK_INCLUDE='GwUserTasks.h'
+GROVE_CONFIG="GwM5GroveGen.h"
+GROVE_CONFIG_IN="lib/hardware/GwM5Grove.in"
 EMBEDDED_INCLUDE="GwEmbeddedFiles.h"
 
 def getEmbeddedFiles(env):
@@ -68,7 +76,7 @@ def generateFile(infile,outfile,callback,inMode='rb',outMode='w'):
     print("creating %s"%outfile)
     oh=None
     with open(infile,inMode) as ch:
-        with open(outfile,'w') as oh:
+        with open(outfile,outMode) as oh:
             try:
                 callback(ch,oh,inFile=infile)
                 oh.close()
@@ -102,6 +110,44 @@ def mergeConfig(base,other):
                 base=base+merge
     return base
 
+def replaceTexts(data,replacements):
+    if replacements is None:
+        return data
+    if isinstance(data,str):
+        for k,v in replacements.items():
+            data=data.replace("$"+k,str(v))
+        return data
+    if isinstance(data,list):
+        rt=[]
+        for e in data:
+            rt.append(replaceTexts(e,replacements))
+        return rt
+    if isinstance(data,dict):   
+        rt={} 
+        for k,v in data.items():
+            rt[replaceTexts(k,replacements)]=replaceTexts(v,replacements)
+        return rt
+    return data
+def expandConfig(config):
+    rt=[]
+    for item in config:
+        type=item.get('type')
+        if type != 'array':
+            rt.append(item)
+            continue
+        replacements=item.get('replace')
+        children=item.get('children')
+        name=item.get('name')
+        if name is None:
+            name="#unknown#"
+        if not isinstance(replacements,list):
+            raise Exception("missing replacements at array %s"%name)
+        for replace in replacements:
+            if children is not None:
+                for c in children:
+                    rt.append(replaceTexts(c,replace))
+    return rt
+
 def generateMergedConfig(inFile,outFile,addDirs=[]):
     if not os.path.exists(inFile):
         raise Exception("unable to read cfg file %s"%inFile)
@@ -109,45 +155,49 @@ def generateMergedConfig(inFile,outFile,addDirs=[]):
     with open(inFile,'rb') as ch:    
         config=json.load(ch)
         config=mergeConfig(config,addDirs)
+        config=expandConfig(config)
         data=json.dumps(config,indent=2)
         writeFileIfChanged(outFile,data)
 
-def generateCfg(inFile,outFile,addDirs=[]):
+def generateCfg(inFile,outFile,impl):
     if not os.path.exists(inFile):
         raise Exception("unable to read cfg file %s"%inFile)
     data=""
     with open(inFile,'rb') as ch:    
-        config=json.load(ch)
-        config=mergeConfig(config,addDirs)      
+        config=json.load(ch)     
         data+="//generated from %s\n"%inFile
-        data+='#include "GwConfigItem.h"\n'
         l=len(config)
-        data+='class GwConfigDefinitions{\n'
-        data+='  public:\n'
-        data+='  int getNumConfig() const{return %d;}\n'%(l)
-        for item in config:
-            n=item.get('name')
-            if n is None:
-                continue
-            if len(n) > 15:
-                raise Exception("%s: config names must be max 15 caracters"%n)
-            data+='  static constexpr const __FlashStringHelper* %s=F("%s");\n'%(n,n)
-        data+='  protected:\n'    
-        data+='  GwConfigInterface *configs[%d]={\n'%(l)
-        first=True
-        for item in config:
-            if not first:
-                data+=',\n'
-            first=False 
-            secret="false";
-            if item.get('type') == 'password':
-                secret="true"   
-            data+="    new GwConfigInterface(%s,\"%s\",%s)"%(item.get('name'),item.get('default'),secret)
-        data+='};\n'  
-        data+='};\n'
+        idx=0
+        if not impl:
+            data+='#include "GwConfigItem.h"\n'
+            data+='class GwConfigDefinitions{\n'
+            data+='  public:\n'
+            data+='  int getNumConfig() const{return %d;}\n'%(l)
+            for item in config:
+                n=item.get('name')
+                if n is None:
+                    continue
+                if len(n) > 15:
+                    raise Exception("%s: config names must be max 15 caracters"%n)
+                data+='  static constexpr const char* %s="%s";\n'%(n,n)
+            data+="};\n"
+        else:
+            data+='void GwConfigHandler::populateConfigs(GwConfigInterface **config){\n'
+            for item in config:
+                name=item.get('name')
+                if name is None:
+                    continue
+                data+='  configs[%d]='%(idx)
+                idx+=1
+                secret="false";
+                if item.get('type') == 'password':
+                    secret="true"
+                data+="     new GwConfigInterface(%s,\"%s\",%s);\n"%(name,item.get('default'),secret)
+            data+='}\n'  
     writeFileIfChanged(outFile,data)    
                     
-
+def labelFilter(label):
+    return re.sub("[^a-zA-Z0-9]","",re.sub("\([0-9]*\)","",label))    
 def generateXdrMappings(fp,oh,inFile=''):
     jdoc=json.load(fp)
     oh.write("static GwXDRTypeMapping* typeMappings[]={\n")
@@ -186,15 +236,91 @@ def generateXdrMappings(fp,oh,inFile=''):
             oh.write("   new GwXDRTypeMapping(%d,%d,%d) /*%s:%s*/"%(cid,id,tc,cat,l))
     oh.write("\n")
     oh.write("};\n")
+    for cat in jdoc:
+        item=jdoc[cat]
+        cid=item.get('id')
+        if cid is None:
+            continue
+        selectors=item.get('selector')
+        if selectors is not None:
+            for selector in selectors:
+                label=selector.get('l')
+                value=selector.get('v')
+                if label is not None and value is not None:
+                    label=labelFilter(label)
+                    define=("GWXDRSEL_%s_%s"%(cat,label)).upper()
+                    oh.write("    #define %s %s\n"%(define,value))
+        fields=item.get('fields')
+        if fields is not None:
+            idx=0
+            for field in fields:
+                v=field.get('v')
+                if v is None:
+                    v=idx
+                else:
+                    v=int(v)
+                label=field.get('l')
+                if v is not None and label is not None:
+                    define=("GWXDRFIELD_%s_%s"%(cat,labelFilter(label))).upper();
+                    oh.write("    #define %s %s\n"%(define,str(v)))
+                idx+=1
+
+class Grove:
+    def __init__(self,name) -> None:
+        self.name=name
+    def _ss(self,z=False):
+        if z:
+            return self.name
+        return self.name if self.name is not 'Z' else ''
+    def _suffix(self):
+        return '_'+self.name if self.name is not 'Z' else ''
+    def replace(self,line):
+        if line is None:
+            return line
+        return line.replace('$G$',self._ss()).replace('$Z$',self._ss(True)).replace('$GS$',self._suffix())
+def generateGroveDefs(inh,outh,inFile=''):
+    GROVES=[Grove('Z'),Grove('A'),Grove('B'),Grove('C')]
+    definition=[]
+    started=False
+    def writeConfig():
+        for grove in GROVES:        
+            for cl in definition:
+                outh.write(grove.replace(cl))
+
+    for line in inh:
+        if re.match(" *#GROVE",line):
+            started=True
+            if len(definition) > 0:
+                writeConfig()
+            definition=[]
+            continue
+        if started:
+            definition.append(line)
+    if len(definition) > 0:
+        writeConfig()
+
+
 
 userTaskDirs=[]
 
 def getUserTaskDirs():
     rt=[]
-    taskdirs=glob.glob(os.path.join('lib','*task*'))
+    taskdirs=glob.glob(os.path.join( basePath(),'lib','*task*'))
     for task in taskdirs:
         rt.append(task)
     return rt
+
+def checkAndAdd(file,names,ilist):
+    if not file.endswith('.h'):
+        return
+    match=False
+    for cmp in names:
+        #print("##check %s<->%s"%(f.lower(),cmp))
+        if file.lower() == cmp:
+            match=True
+    if not match:
+        return
+    ilist.append(file) 
 def genereateUserTasks(outfile):
     includes=[]
     for task in userTaskDirs:
@@ -202,16 +328,7 @@ def genereateUserTasks(outfile):
         base=os.path.basename(task)
         includeNames=[base.lower()+".h",'gw'+base.lower()+'.h']
         for f in os.listdir(task):
-            if not f.endswith('.h'):
-                continue
-            match=False
-            for cmp in includeNames:
-                #print("##check %s<->%s"%(f.lower(),cmp))
-                if f.lower() == cmp:
-                    match=True
-            if not match:
-                continue
-            includes.append(f)
+            checkAndAdd(f,includeNames,includes)
     includeData=""
     for i in includes:
         print("#task include %s"%i)
@@ -237,16 +354,92 @@ def getContentType(fn):
         return "text/css"
     return "application/octet-stream"
 
+
+def getLibs():
+    base=os.path.join(basePath(),"lib")
+    rt=[]
+    for sd in os.listdir(base):
+        if sd == '..':
+            continue
+        if sd == '.':
+            continue
+        fn=os.path.join(base,sd)
+        if os.path.isdir(fn):
+            rt.append(sd)
+    EXTRAS=['generated']
+    for e in EXTRAS:
+        if not e in rt:
+            rt.append(e)
+    return rt
+
+OWNLIBS=getLibs()+["FS","WiFi"]
+GLOBAL_INCLUDES=[]
+
+def handleDeps(env):
+    #overwrite the GetProjectConfig
+    #to inject all our libs
+    oldGetProjectConfig=env.GetProjectConfig    
+    def GetProjectConfigX(env):        
+        rt=oldGetProjectConfig()
+        cenv="env:"+env['PIOENV']
+        libs=[]
+        for section,options in rt.as_tuple():
+            if section == cenv:
+                for key,values in options:
+                    if key == 'lib_deps':
+                        libs=values
+    
+        mustUpdate=False
+        for lib in OWNLIBS:
+            if not lib in libs:
+                libs.append(lib)
+                mustUpdate=True
+        if mustUpdate:
+            update=[(cenv,[('lib_deps',libs)])]
+            rt.update(update)
+        return rt
+    env.AddMethod(GetProjectConfigX,"GetProjectConfig")
+    #store the list of all includes after we resolved
+    #the dependencies for our main project
+    #we will use them for all compilations afterwards
+    oldLibBuilder=env.ConfigureProjectLibBuilder
+    def ConfigureProjectLibBuilderX(env):
+        global GLOBAL_INCLUDES
+        project=oldLibBuilder()
+        #print("##ConfigureProjectLibBuilderX")
+        #pprint.pprint(project)
+        if project.depbuilders:
+            #print("##depbuilders %s"%",".join(map(lambda x: x.path,project.depbuilders)))
+            for db in project.depbuilders:
+                idirs=db.get_include_dirs()
+                for id in idirs:
+                    if not id in GLOBAL_INCLUDES:
+                        GLOBAL_INCLUDES.append(id)
+        return project
+    env.AddMethod(ConfigureProjectLibBuilderX,"ConfigureProjectLibBuilder")
+    def injectIncludes(env,node):
+        return env.Object(
+            node,
+            CPPPATH=env["CPPPATH"]+GLOBAL_INCLUDES
+        )
+    env.AddBuildMiddleware(injectIncludes)
+
+
 def prebuild(env):
     global userTaskDirs
     print("#prebuild running")
     if not checkDir():
         sys.exit(1)
+    ldf_mode=env.GetProjectOption("lib_ldf_mode")
+    if ldf_mode == 'off':
+        print("##ldf off - own dependency handling")
+        handleDeps(env)
     userTaskDirs=getUserTaskDirs()
     mergedConfig=os.path.join(outPath(),os.path.basename(CFG_FILE))
     generateMergedConfig(os.path.join(basePath(),CFG_FILE),mergedConfig,userTaskDirs)
     compressFile(mergedConfig,mergedConfig+".gz")
-    generateCfg(mergedConfig,os.path.join(outPath(),CFG_INCLUDE))
+    generateCfg(mergedConfig,os.path.join(outPath(),CFG_INCLUDE),False)
+    generateCfg(mergedConfig,os.path.join(outPath(),CFG_INCLUDE_IMPL),True)
     embedded=getEmbeddedFiles(env)
     filedefs=[]
     for ef in embedded:
@@ -267,6 +460,7 @@ def prebuild(env):
     generateEmbedded(filedefs,os.path.join(outPath(),EMBEDDED_INCLUDE))
     genereateUserTasks(os.path.join(outPath(), TASK_INCLUDE))
     generateFile(os.path.join(basePath(),XDR_FILE),os.path.join(outPath(),XDR_INCLUDE),generateXdrMappings)
+    generateFile(os.path.join(basePath(),GROVE_CONFIG_IN),os.path.join(outPath(),GROVE_CONFIG),generateGroveDefs,inMode='r')
     version="dev"+datetime.now().strftime("%Y%m%d")
     env.Append(CPPDEFINES=[('GWDEVVERSION',version)])
 
@@ -280,10 +474,15 @@ def cleangenerated(source, target, env):
             fn=os.path.join(od,f)
             os.unlink(f)
 
+
 print("#prescript...")
 prebuild(env)
+board="PLATFORM_BOARD_%s"%env["BOARD"].replace("-","_").upper()
+print("Board=#%s#"%board)
+print("BuildFlags=%s"%(" ".join(env["BUILD_FLAGS"])))
 env.Append(
-    LINKFLAGS=[ "-u", "custom_app_desc" ]
+    LINKFLAGS=[ "-u", "custom_app_desc" ],
+    CPPDEFINES=[(board,"1")]
 )
 #script does not run on clean yet - maybe in the future
 env.AddPostAction("clean",cleangenerated)

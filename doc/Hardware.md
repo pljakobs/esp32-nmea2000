@@ -3,6 +3,7 @@ Hardware Configurations
 This pages describes a couple of the potential hardware configurations you could use with the code.
 Finally this list is not complete and you can easily define your own set up by adding definitions.
 Hint: all prebuild binaries can be found at [releases](https://github.com/wellenvogel/esp32-nmea2000/releases).
+Additionally you can use the [online build service](BuildService.md) to create binaries for a lot of hardware combinations. 
 The "Build Defines" describe which of the hardware definitions from [Hardware.h](../lib/hardware/Hardware.h) are used.
 
 M5 Atom CAN
@@ -78,6 +79,15 @@ Can be used e.g. as an NMEA2000 Adapter for a laptop running e.g. OpenCPN with t
 ![OpenCPN on Laptop via USB and MFD on Android via WiFi](in_action1.jpg) 
 ![OpenCPN on Laptop via USB and AvNav on Android via WiFi](in_action2.jpg)
 
+M5 Stack AtomS3Lite Canunit 
+---------------------
+* Hardware: [M5_ATOMS3 Lite](http://docs.m5stack.com/en/core/AtomS3%20Lite) + [CAN Unit](http://docs.m5stack.com/en/unit/can)
+* Prebuild Binary: m5stack-atoms3-canunit-all.bin
+* Build Define: BOARD_M5ATOMS3_CANUNIT
+* Power: Via USB
+
+![M5_Atom_S3 with CAN unit](AtomS3Can.jpg)
+
 M5 Stick C Canunit
 ------------------
 * Hardware: [M5_StickC+](http://docs.m5stack.com/en/core/m5stickc_plus) + [CAN Unit](http://docs.m5stack.com/en/unit/can)
@@ -89,6 +99,14 @@ M5 Stick C Canunit
 ![M5StickC+ with CAN unit](stickc_can.jpg)
 
 Can be used e.g. as an NMEA2000 Adapter for a laptop running e.g. OpenCPN with the NMEA2000 Data converted to NMEA0183.
+
+M5 Stack AtomS3Lite PortABC+CAN+ENV3
+------------------
+* Hardware: [M5_ATOMS3 Lite](http://docs.m5stack.com/en/core/AtomS3%20Lite) + [M5_PORTABC](https://docs.m5stack.com/en/unit/AtomPortABC) + [CAN Unit](http://docs.m5stack.com/en/unit/can) + [M5 ENV3](https://docs.m5stack.com/en/unit/envIII)
+* Build: [Online service](BuildService.md)
+* Power: Via USB
+
+![M5_Atom_S3 + PortABC + CAN unit + ENV3](AtomS3-PortABC-CAN.jpg)
 
 Node MCU32s -  [Homberger Board](https://github.com/AK-Homberger/NMEA2000WifiGateway-with-ESP32)
 --------------------------------------

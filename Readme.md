@@ -38,6 +38,8 @@ What is included
 * a WEB UI to configure the gateway and to show the data that has been received
 * a USB Actisense to NMEA2000 gateway
 * a NMEA2000 to USB Actisense gateway
+* starting with 201311xx some [I2C Sensors](doc/Sensors.md)
+* starting with 20240324 [SSI rotary encoders](doc/Sensors.md)
 
 For the details of the mapped PGNs and NMEA sentences refer to [Conversions](doc/Conversions.pdf).
 
@@ -46,11 +48,15 @@ Hardware
 The software is prepared to run on different kinds of ESP32 based modules and accessoirs. For some of them prebuild binaries are available that only need to be flashed, others would require to add some definitions of the used PINs and features and to build the binary.
 For the list of hardware set ups refer to [Hardware](doc/Hardware.md).
 
+There is a couple of prebuild binaries that you can directly flash to your device. For other combinations of hardware there is an [online build service](doc/BuildService.md) that will allow you to select your hardware and trigger a build.
+
 
 Installation
 ------------
 In the [release section](../../releases) you can find a couple of pre-build binaries.<br>
-They are devided into binaries for an initial flash (xxx-all.bin) and binaries for updating an existing device (xxx-update.bin).
+They are devided into binaries for an initial flash (xxx-all.bin) and binaries for updating an existing device (xxx-update.bin). 
+
+For other Hardware refer to the [online build service](doc/BuildService.md).
 
 Initial Flash
 *************
@@ -160,6 +166,40 @@ For details refer to the [example description](lib/exampletask/Readme.md).
 
 Changelog
 ---------
+[20240428](../../releases/tag/20240428)
+**********
+* fix build error with M5 gps kit
+[20240324](../../releases/tag/20240324)
+**********
+* add [SSI rotary encoders](doc/Sensors.md)
+* add some options to the converter (RMC rate, RSA parameters)
+* support for the [M5 Atomic PortABC](https://shop.m5stack.com/products/atomic-portabc-extension-base) - more grove ports [#58](../../issues/58)
+* some restructuring in the hardware definitions
+* add SSID to status page [#37](../../issues/37)
+* allow to attach i2c sensors to the grove ports in the [build service](doc/BuildService.md)
+* add calset and calval config types<br>
+  This requires to write current values of a sensor at the [api](../lib/api/GwApi.h#L191) with setCalibrationValue.
+  The user can then bring up a calibration dialog and can set the current value as the config value.
+* change log flushing to USB port that prevented ESP32 S3 based boards to start if no USB connection was available
+* prevent the Web UI from appearing frozen if there was a large amount of invalid NMEA data received [#60](../../issues/60)
+
+
+[20231228](../../releases/tag/20231228)
+**********
+* lock AsyncTCP-esphome to 2.0.1 to avoid compile errors
+* own main loop to avoid deadlocks with serial send in user tasks
+
+[20231105](../../releases/tag/20231105)
+**********
+* support for ESP32-S3
+* own [TWAI](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/twai.html) based driver for the NMEA2000 bus
+* add NMEA2000 node address and status to the status tab
+* ability to change the AP ip address 
+* [online build service ](doc/BuildService.md) to select the components you need
+* restructuring of the lib_deps handling (much shorter compile time <br>__Hint__: if this introduces problems for your build, revert back the [lib_ldf_mode](https://github.com/wellenvogel/esp32-nmea2000/blob/9b955d135d74937a60f2926e8bfb9395585ff8cd/platformio.ini#L50) to chain+ 
+* integration of a couple of I2C sensors (e.g. M5 ENVIII, BME280)
+* More functionality for user tasks (counter, interface between tasks, dynamic registration, adding fixed XDR mappings) - refer to the [example description](lib/exampletask/Readme.md)
+
 [20230317](../../releases/tag/20230317)
 **********
 * correctly convert bar to Pascal in XDR records

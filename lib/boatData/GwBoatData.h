@@ -4,8 +4,9 @@
 #include "GwLog.h"
 #include <Arduino.h>
 #include <map>
+#include <vector>
 #define GW_BOAT_VALUE_LEN 32
-#define GWSC(name) static constexpr const __FlashStringHelper* name=F(#name)
+#define GWSC(name) static constexpr const char* name=#name
 
 //see https://github.com/wellenvogel/esp32-nmea2000/issues/44
 //factor to convert from N2k/SI rad/s to current NMEA rad/min
@@ -164,10 +165,10 @@ public:
     virtual ~GwBoatItemNameProvider() {}
 };
 #define GWBOATDATA(type,name,time,fmt)  \
-    static constexpr const __FlashStringHelper* _##name=F(#name); \
-    GwBoatItem<type> *name=new GwBoatItem<type>(F(#name),GwBoatItemBase::fmt,time,&values) ;
+    static constexpr const char* _##name=#name; \
+    GwBoatItem<type> *name=new GwBoatItem<type>(#name,GwBoatItemBase::fmt,time,&values) ;
 #define GWSPECBOATDATA(clazz,name,time,fmt)  \
-    clazz *name=new clazz(F(#name),GwBoatItemBase::fmt,time,&values) ;
+    clazz *name=new clazz(#name,GwBoatItemBase::fmt,time,&values) ;
 class GwBoatData{
     private:
         GwLog *logger;
@@ -191,7 +192,8 @@ class GwBoatData{
     GWBOATDATA(double,HDOP,4000,formatDop)
     GWBOATDATA(double,PDOP,4000,formatDop)
     GWBOATDATA(double,VDOP,4000,formatDop)
-    GWBOATDATA(double,RPOS,4000,formatCourse) //RudderPosition
+    GWBOATDATA(double,RPOS,4000,formatWind) //RudderPosition
+    GWBOATDATA(double,PRPOS,4000,formatWind) //second rudder pos
     GWBOATDATA(double,LAT,4000,formatLatitude)
     GWBOATDATA(double,LON,4000,formatLongitude)
     GWBOATDATA(double,ALT,4000,formatFixed0) //altitude

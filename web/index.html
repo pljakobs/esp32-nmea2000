@@ -37,7 +37,7 @@
     </div>
     <div class="row ">
       <span class="label">wifi client connected</span>
-      <span class="value" id="wifiConnected">---</span>
+      <span class="value" id="wifiConnected">---</span>&nbsp;[<span class="value" id="wifiSSID">---</span>]
     </div>
     <div class="row even">
       <span class="label">wifi client IP</span>
@@ -47,7 +47,7 @@
       <span class="label"># clients</span>
       <span class="value" id="numClients">---</span>
     </div> 
-    <div class="row">
+    <div class="row even">
       <span class="label">TCP client connected</span>
       <span class="value" id="clientCon">---</span>
     </div>
@@ -55,10 +55,15 @@
       <span class="label">TCP client error</span>
       <span class="value" id="clientErr">---</span>
     </div> 
-    <div class="row">
+    <div class="row even">
       <span class="label">Free heap</span>
       <span class="value" id="heap">---</span>
-    </div>  
+    </div>
+    <div class="row">
+      <span class="label">NMEA2000 State</span>
+      [<span class="value" id="n2knode">---</span>]&nbsp;
+      <span class="value" id="n2kstate">UNKNOWN</span>
+    </div> 
   </div>
   <button id="reset">Reset</button>
 </div>
@@ -96,6 +101,10 @@
     <span class="value status-fwtype">---</span>
   </div>
   <div class="row">
+    <span class="label">chip type</span>
+    <span class="value status-chipid">---</span>
+  </div>
+  <div class="row">
     <span class="label">currentVersion</span>
     <span class="value status-version">---</span>
   </div>
@@ -122,7 +131,6 @@
       AHA
     </div>
     <div class="overlayButtons">
-      <button id="hideOverlay">Close</button>
     </div>
   </div>
 </div>
@@ -180,6 +188,17 @@
 </div>
 <div class="hidden">
   <a id="downloadXdr"></a>
+</div>
+<div class="hidden" id="calset">
+  <h2 class="heading"></h2>
+  <p class="val"></p>
+</div>
+<div class="hidden" id="calval">
+  <h2 class="heading"></h2>
+  <p class="val"></p>
+  <label>config
+    <input type="number"/>
+  </label>
 </div>
 </body>
 </html>

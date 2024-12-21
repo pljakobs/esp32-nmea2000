@@ -40,12 +40,11 @@ class GwSerialStream: public Stream{
 
 
 
-GwSerial::GwSerial(GwLog *logger, int num, int id,bool allowRead)
+GwSerial::GwSerial(GwLog *logger, Stream *s, int id,bool allowRead):serial(s)
 {
-    LOG_DEBUG(GwLog::DEBUG,"creating GwSerial %p port %d for %d",this,(int)num,id);
+    LOG_DEBUG(GwLog::DEBUG,"creating GwSerial %p id %d",this,id);
     this->id=id;
     this->logger = logger;
-    this->num = num;
     String bufName="Ser(";
     bufName+=String(id);
     bufName+=")";
@@ -54,21 +53,15 @@ GwSerial::GwSerial(GwLog *logger, int num, int id,bool allowRead)
     if (allowRead){
         this->readBuffer=new GwBuffer(logger, GwBuffer::RX_BUFFER_SIZE,bufName+"rd");
     }
-    this->serial=new HardwareSerial(num);
+    buffer->reset("init");
+    initialized=true;
 }
 GwSerial::~GwSerial()
 {
     delete buffer;
     if (readBuffer) delete readBuffer;
-    delete serial;
 }
-int GwSerial::setup(int baud, int rxpin, int txpin)
-{
-    serial->begin(baud,SERIAL_8N1,rxpin,txpin);
-    buffer->reset(F("init"));
-    initialized = true;
-    return 0;
-}
+
 bool GwSerial::isInitialized() { return initialized; }
 size_t GwSerial::enqueue(const uint8_t *data, size_t len, bool partial)
 {
@@ -122,11 +115,21 @@ void GwSerial::readMessages(GwMessageFetcher *writer){
     writer->handleBuffer(readBuffer);
 }
 
-void GwSerial::flush(){
-   if (! isInitialized()) return; 
-   while (write() == GwBuffer::AGAIN){
-       vTaskDelay(1);
+bool GwSerial::flush(long max){
+   if (! isInitialized()) return false;
+   if (! availableWrite) {
+    if ( serial->availableForWrite() < 1){
+        return false;
+    }
+    availableWrite=true;
    }
+   auto start=millis();
+   while (millis() < (start+max)){
+        if (write() != GwBuffer::AGAIN) return true;
+        vTaskDelay(1);
+   }
+   availableWrite=(serial->availableForWrite() > 0);
+   return false;
 }
 Stream * GwSerial::getStream(bool partialWrite){
     return new GwSerialStream(this,partialWrite);
