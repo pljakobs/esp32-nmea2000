@@ -163,6 +163,14 @@
 #define GWBUTTON_PULLUPDOWN 
 #endif
 
+#ifdef BOARD_PJ
+#define ESP32_CAN_TX_PIN GPIO_NUM_16
+#define ESP32_CAN_RX_PIN GPIO_NUM_17
+
+#define GWSERIAL_RX 35
+#define GWSERIAL_MODE "RX"
+#endif
+
 #include "GwM5Base.h"
 #include "GwM5Grove.h"
 

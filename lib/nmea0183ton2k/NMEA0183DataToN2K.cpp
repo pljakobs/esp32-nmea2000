@@ -449,6 +449,11 @@ private:
         char direction = msg.Field(1)[0];
         if (direction == 'L' && WindAngle < 180)
             WindAngle = 360 - WindAngle;
+
+        // wind Angle correction (for vindvane that does not show 0° straight ahead)
+        WindAngle-=20;
+        if( WindAngle>360) WindAngle-=360;
+        if(WindAngle<0) WindAngle+=360;
         WindAngle = formatDegToRad(WindAngle);
         if (msg.FieldLen(2) > 0 && msg.Field(3)[0] == 'N')
         {
