@@ -413,16 +413,20 @@ private:
         }
         tN2kMsg n2kMsg;
         bool shouldSend=false;
-        WindAngle=formatDegToRad(WindAngle);
         GwConverterConfig::WindMapping mapping;
         switch(Reference){
             case NMEA0183Wind_Apparent:
+                WindAngle+=(double)180;
+                while(WindAngle>360) {WindAngle-=360;}
+                while(WindAngle<0) {WindAngle+=360;}
+                WindAngle=formatDegToRad(WindAngle);
                 shouldSend=updateDouble(boatData->AWA,WindAngle,msg.sourceId) && 
                            updateDouble(boatData->AWS,WindSpeed,msg.sourceId);
                 if (WindSpeed != NMEA0183DoubleNA) boatData->MaxAws->updateMax(WindSpeed,msg.sourceId);    
                 mapping=config.findWindMapping(GwConverterConfig::WindMapping::AWA_AWS);
                 break;
             case NMEA0183Wind_True:
+                WindAngle=formatDegToRad(WindAngle);
                 shouldSend=updateDouble(boatData->TWA,WindAngle,msg.sourceId) && 
                            updateDouble(boatData->TWS,WindSpeed,msg.sourceId);
                 if (WindSpeed != NMEA0183DoubleNA) boatData->MaxTws->updateMax(WindSpeed,msg.sourceId);    
