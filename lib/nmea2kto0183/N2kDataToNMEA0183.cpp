@@ -1317,6 +1317,54 @@ private:
         finalizeXdr();
     }
 
+    void Handle65285(const tN2kMsg &msg) {
+        // Proprietary single-frame format used by Lowrance temperature sensors.
+        // canboat: manufacturer=140, industry=4, source(8b), temp(0.01K, 16b)
+        if (msg.DataLen < 5) {
+            LOG_DEBUG(GwLog::DEBUG, "PGN %d too short (%d)", msg.PGN, msg.DataLen);
+            return;
+        }
+
+        int index = 0;
+        uint16_t header = msg.Get2ByteUInt(index);
+        uint16_t manufacturerCode = header & 0x07ff;
+        uint8_t industryCode = (header >> 13) & 0x07;
+
+        if (manufacturerCode != 140 || industryCode != 4) {
+            return;
+        }
+
+        uint8_t temperatureSource = msg.GetByte(index);
+        uint16_t rawTemperature = msg.Get2ByteUInt(index);
+        if (rawTemperature == 0xffff) {
+            return;
+        }
+
+        double temperature = ((double)rawTemperature) * 0.01;
+        if ((tN2kTempSource)temperatureSource == N2kts_SeaTemperature) {
+            updateDouble(boatData->WTemp, temperature);
+
+            tNMEA0183Msg NMEA0183Msg;
+            if (!NMEA0183Msg.Init("MTW", talkerId)) {
+                return;
+            }
+            if (!NMEA0183Msg.AddDoubleField(KelvinToC(temperature))) {
+                return;
+            }
+            if (!NMEA0183Msg.AddStrField("C")) {
+                return;
+            }
+            SendMessage(NMEA0183Msg);
+        }
+
+        GwXDRFoundMapping mapping = xdrMappings->getMapping(temperature, XDRTEMP, (int)temperatureSource, 0, 0);
+        if (updateDouble(&mapping, temperature)) {
+            LOG_DEBUG(GwLog::DEBUG + 1, "found lowrance 65285 temperature mapping %s", mapping.definition->toString().c_str());
+            addToXdr(mapping.buildXdrEntry(temperature));
+            finalizeXdr();
+        }
+    }
+
     void Handle130313(const tN2kMsg &msg){
         unsigned char SID=-1;
         unsigned char HumidityInstance=0;
@@ -1486,6 +1534,7 @@ private:
       converters.registerConverter(127488UL, &N2kToNMEA0183Functions::Handle127488);
       converters.registerConverter(130316UL, &N2kToNMEA0183Functions::Handle130316);
       converters.registerConverter(127257UL, &N2kToNMEA0183Functions::Handle127257);
+        converters.registerConverter(65285UL, &N2kToNMEA0183Functions::Handle65285);
 #define HANDLE_AIS
 #ifdef HANDLE_AIS
       converters.registerConverter(129038UL, &N2kToNMEA0183Functions::HandleAISClassAPosReport);  // AIS Class A Position Report, Message Type 1

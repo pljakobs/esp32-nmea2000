@@ -166,6 +166,25 @@ bool checkPass(String hash){
 GwUpdate updater(&logger,&webserver,&checkPass);
 GwConfigInterface *systemName=config.getConfigItem(config.systemName,true);
 
+static bool buildLowrance65285As130312(const tN2kMsg &inMsg, tN2kMsg &outMsg) {
+  if (inMsg.PGN != 65285UL) return false;
+  if (inMsg.DataLen < 5) return false;
+
+  int idx = 0;
+  uint16_t header = inMsg.Get2ByteUInt(idx);
+  uint16_t manufacturerCode = header & 0x07ff;
+  uint8_t industryCode = (header >> 13) & 0x07;
+  if (manufacturerCode != 140 || industryCode != 4) return false;
+
+  uint8_t temperatureSource = inMsg.GetByte(idx);
+  uint16_t rawTemperature = inMsg.Get2ByteUInt(idx);
+  if (rawTemperature == 0xffff) return false;
+
+  const double temperatureK = ((double)rawTemperature) * 0.01;
+  SetN2kPGN130312(outMsg, 1, 0, (tN2kTempSource)temperatureSource, temperatureK, N2kDoubleNA);
+  return true;
+}
+
 
 void handleN2kMessage(const tN2kMsg &n2kMsg,int sourceId, bool isConverted=false)
 {
@@ -202,6 +221,20 @@ void handleN2kMessage(const tN2kMsg &n2kMsg,int sourceId, bool isConverted=false
   if (! isConverted){
     nmea0183Converter->HandleMsg(n2kMsg,sourceId);
   }
+
+  if (sourceId == N2K_CHANNEL_ID && sendOutN2k) {
+    tN2kMsg mappedMsg;
+    if (buildLowrance65285As130312(n2kMsg, mappedMsg)) {
+      if (NMEA2000.SendMsg(mappedMsg)) {
+        countNMEA2KOut.add(mappedMsg.PGN);
+        logger.logDebug(GwLog::DEBUG + 1, "republished PGN %d as %d", n2kMsg.PGN, mappedMsg.PGN);
+      }
+      else {
+        countNMEA2KOut.addFail(mappedMsg.PGN);
+      }
+    }
+  }
+
   if (sourceId != N2K_CHANNEL_ID && sendOutN2k){
     if (NMEA2000.SendMsg(n2kMsg)){
       countNMEA2KOut.add(n2kMsg.PGN);
