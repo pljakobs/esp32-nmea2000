@@ -1287,8 +1287,10 @@ private:
            LOG_DEBUG(GwLog::DEBUG,"unable to parse PGN %d",msg.PGN);
            return;
         }
-        if (TemperatureSource == N2kts_SeaTemperature && 
-            (config.winst312 == TemperatureInstance || config.winst312 == 256)) {
+                bool instanceMatch=(config.winst312 == TemperatureInstance || config.winst312 == 256);
+                bool allowRemapByInstance=(config.winst312 == TemperatureInstance && config.winst312 >= 0 && config.winst312 <= 255);
+                bool useAsWaterTemp=instanceMatch && (TemperatureSource == N2kts_SeaTemperature || allowRemapByInstance);
+                if (useAsWaterTemp) {
           updateDouble(boatData->WTemp, Temperature);
           tNMEA0183Msg NMEA0183Msg;
 
