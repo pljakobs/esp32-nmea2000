@@ -1632,6 +1632,14 @@
                     formatFixed(s, 2, 0);
             },
             u: ''
+        },
+        formatLearnState: {
+            f: function (v) {
+                let x = parseInt(v);
+                if (isNaN(x)) return 'LEARN';
+                return x > 0 ? 'STABLE' : 'LEARN';
+            },
+            u: ''
         }
 
 

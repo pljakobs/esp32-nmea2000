@@ -132,6 +132,24 @@ private:
             return false;
         return boatData->update((double)value,sourceId,mapping);
     }
+    double applyWaterTempOffset(double value, int instance=0) {
+        if (value == N2kDoubleNA) return value;
+        return value + config.getWaterTempOffset(instance);
+    }
+    bool updateWaterTemp(double value, int instance=0) {
+        if (value == N2kDoubleNA) return false;
+        value = applyWaterTempOffset(value,instance);
+        updateDouble(boatData->WTemp, value);
+        tNMEA0183Msg NMEA0183Msg;
+        if (!NMEA0183Msg.Init("MTW", talkerId))
+            return false;
+        if (!NMEA0183Msg.AddDoubleField(KelvinToC(value)))
+            return false;
+        if (!NMEA0183Msg.AddStrField("C"))
+            return false;
+        SendMessage(NMEA0183Msg);
+        return true;
+    }
     
     
     virtual unsigned long *handledPgns()
@@ -1201,17 +1219,7 @@ private:
         double WaterTemperature=N2kDoubleNA;
         if (ParseN2kPGN130310(N2kMsg, SID, WaterTemperature, OutsideAmbientAirTemperature, AtmosphericPressure))
         {
-            updateDouble(boatData->WTemp, WaterTemperature);
-            tNMEA0183Msg NMEA0183Msg;
-
-            if (!NMEA0183Msg.Init("MTW", talkerId))
-                return;
-            if (!NMEA0183Msg.AddDoubleField(KelvinToC(WaterTemperature)))
-                return;
-            if (!NMEA0183Msg.AddStrField("C"))
-                return;
-
-            SendMessage(NMEA0183Msg);
+            updateWaterTemp(WaterTemperature,0);
         }
         int i=0;
         GwXDRFoundMapping mapping=xdrMappings->getMapping(OutsideAmbientAirTemperature, XDRTEMP,N2kts_OutsideTemperature,0,0);
@@ -1242,17 +1250,7 @@ private:
         }
         int i=0;
         if (TempSource == N2kts_SeaTemperature) {
-          updateDouble(boatData->WTemp, Temperature);
-          tNMEA0183Msg NMEA0183Msg;
-
-          if (!NMEA0183Msg.Init("MTW", talkerId))
-              return;
-          if (!NMEA0183Msg.AddDoubleField(KelvinToC(Temperature)))
-              return;
-          if (!NMEA0183Msg.AddStrField("C"))
-              return;
-
-            SendMessage(NMEA0183Msg);
+                    updateWaterTemp(Temperature,0);
         }
 
         GwXDRFoundMapping mapping=xdrMappings->getMapping(Temperature, XDRTEMP,TempSource,0,0);
@@ -1291,17 +1289,7 @@ private:
                 bool allowRemapByInstance=(config.winst312 == TemperatureInstance && config.winst312 >= 0 && config.winst312 <= 255);
                 bool useAsWaterTemp=instanceMatch && (TemperatureSource == N2kts_SeaTemperature || allowRemapByInstance);
                 if (useAsWaterTemp) {
-          updateDouble(boatData->WTemp, Temperature);
-          tNMEA0183Msg NMEA0183Msg;
-
-          if (!NMEA0183Msg.Init("MTW", talkerId))
-              return;
-          if (!NMEA0183Msg.AddDoubleField(KelvinToC(Temperature)))
-              return;
-          if (!NMEA0183Msg.AddStrField("C"))
-              return;
-
-            SendMessage(NMEA0183Msg);
+          updateWaterTemp(Temperature,TemperatureInstance);
         }
 
         GwXDRFoundMapping mapping=xdrMappings->getMapping(Temperature, XDRTEMP,(int)TemperatureSource,0,TemperatureInstance);
@@ -1342,19 +1330,7 @@ private:
 
         double temperature = ((double)rawTemperature) * 0.01;
         if ((tN2kTempSource)temperatureSource == N2kts_SeaTemperature) {
-            updateDouble(boatData->WTemp, temperature);
-
-            tNMEA0183Msg NMEA0183Msg;
-            if (!NMEA0183Msg.Init("MTW", talkerId)) {
-                return;
-            }
-            if (!NMEA0183Msg.AddDoubleField(KelvinToC(temperature))) {
-                return;
-            }
-            if (!NMEA0183Msg.AddStrField("C")) {
-                return;
-            }
-            SendMessage(NMEA0183Msg);
+            updateWaterTemp(temperature,0);
         }
 
         GwXDRFoundMapping mapping = xdrMappings->getMapping(temperature, XDRTEMP, (int)temperatureSource, 0, 0);

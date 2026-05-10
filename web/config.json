@@ -364,6 +364,14 @@
         "category":"converter"
     },
     {
+        "name": "wTempOffsets",
+        "label": "Water temp offsets",
+        "type": "string",
+        "default": "",
+        "description": "per-instance water temperature offsets as comma separated instance=offset pairs in °C, e.g. 0=-5.2,3=0.8",
+        "category":"converter"
+    },
+    {
         "name": "usbActisense",
         "label": "USB mode",
         "type": "list",

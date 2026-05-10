@@ -140,6 +140,7 @@ GwWifi gwWifi(&config,&logger,fixedApPass);
 GwChannelList channels(&logger,&config);
 GwBoatData boatData(&logger,&config);
 GwXDRMappings xdrMappings(&logger,&config);
+GwConverterConfig converterConfig;
 bool sendOutN2k=true;
 
 
@@ -180,7 +181,7 @@ static bool buildLowrance65285As130312(const tN2kMsg &inMsg, tN2kMsg &outMsg) {
   uint16_t rawTemperature = inMsg.Get2ByteUInt(idx);
   if (rawTemperature == 0xffff) return false;
 
-  const double temperatureK = ((double)rawTemperature) * 0.01;
+  const double temperatureK = (((double)rawTemperature) * 0.01) + converterConfig.getWaterTempOffset(0);
   SetN2kPGN130312(outMsg, 1, 0, (tN2kTempSource)temperatureSource, temperatureK, N2kDoubleNA);
   return true;
 }
@@ -893,7 +894,6 @@ void setup() {
   webserver.begin();
   xdrMappings.begin();
   logger.flush();
-  GwConverterConfig converterConfig;
   converterConfig.init(&config,&logger);
   nmea0183Converter= N2kDataToNMEA0183::create(&logger, &boatData, 
     [](const tNMEA0183Msg &msg, int sourceId){
