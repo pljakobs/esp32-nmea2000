@@ -989,7 +989,8 @@ void setup() {
   logger.logDebug(GwLog::LOG,"setup done");
   #ifdef OWN_LOOP
   logger.logDebug(GwLog::LOG,"starting own main loop");
-  xTaskCreateUniversal(loopFunction,"loop",8192,NULL,1,NULL,ARDUINO_RUNNING_CORE);
+  // Stack depth is in FreeRTOS words (4 bytes on ESP32).
+  xTaskCreateUniversal(loopFunction,"loop",6144,NULL,1,NULL,ARDUINO_RUNNING_CORE);
   #endif
 }  
 //*****************************************************************************
