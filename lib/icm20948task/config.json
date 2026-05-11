@@ -1,0 +1,187 @@
+[
+  {
+    "name": "imutype",
+    "label": "IMU sensor type",
+    "type": "list",
+    "default": "0",
+    "description": "select IMU sensor type (restart required)",
+    "category": "imu",
+    "list": [
+      {"l": "off",      "v": "0"},
+      {"l": "MPU-6050", "v": "1"},
+      {"l": "ICM-20948","v": "2"}
+    ]
+  },
+  {
+    "name": "icm20948intv",
+    "label": "IMU interval ms",
+    "type": "number",
+    "default": 100,
+    "description": "measurement/send interval in milliseconds",
+    "category": "imu",
+    "min": 20,
+    "max": 2000,
+    "check": "checkMinMax",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948iid",
+    "label": "IMU N2K instance id",
+    "type": "number",
+    "default": 60,
+    "description": "NMEA2000 instance id for IMU output",
+    "category": "imu",
+    "min": 0,
+    "max": 253,
+    "check": "checkMinMax",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948att",
+    "label": "send attitude 127257",
+    "type": "boolean",
+    "default": "true",
+    "description": "send PGN 127257 attitude (roll/pitch/yaw)",
+    "category": "imu",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948rot",
+    "label": "send rate of turn 127251",
+    "type": "boolean",
+    "default": "true",
+    "description": "send PGN 127251 rate of turn",
+    "category": "imu",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948hdg",
+    "label": "send heading 127250",
+    "type": "boolean",
+    "default": "false",
+    "description": "send PGN 127250 magnetic heading (ICM-20948 only, experimental)",
+    "category": "imu",
+    "capabilities": {
+      "imuhasmag": "true"
+    }
+  },
+  {
+    "name": "icm20948usem",
+    "label": "use magnetometer",
+    "type": "boolean",
+    "default": "true",
+    "description": "use magnetometer for yaw/heading estimation (ICM-20948 only)",
+    "category": "imu",
+    "capabilities": {
+      "imuhasmag": "true"
+    }
+  },
+  {
+    "name": "icm20948addr",
+    "label": "IMU I2C address",
+    "type": "number",
+    "default": 104,
+    "description": "I2C address: MPU-6050 default 0x68 (104), ICM-20948 default 0x69 (105)",
+    "category": "imu",
+    "min": 0,
+    "max": 127,
+    "check": "checkMinMax",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948sda",
+    "label": "IMU SDA pin",
+    "type": "number",
+    "default": -1,
+    "description": "SDA pin, -1 to use global I2C defaults",
+    "category": "imu",
+    "min": -1,
+    "max": 48,
+    "check": "checkMinMax",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948scl",
+    "label": "IMU SCL pin",
+    "type": "number",
+    "default": -1,
+    "description": "SCL pin, -1 to use global I2C defaults",
+    "category": "imu",
+    "min": -1,
+    "max": 48,
+    "check": "checkMinMax",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948rlinv",
+    "label": "invert roll",
+    "type": "boolean",
+    "default": "false",
+    "description": "invert roll sign to match boat orientation",
+    "category": "imu",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948ptinv",
+    "label": "invert pitch",
+    "type": "boolean",
+    "default": "false",
+    "description": "invert pitch sign to match boat orientation",
+    "category": "imu",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948alpha",
+    "label": "fusion alpha",
+    "type": "number",
+    "default": 0.98,
+    "description": "complementary filter alpha (0..1, higher = trust gyro more)",
+    "category": "imu",
+    "min": 0,
+    "max": 1,
+    "check": "checkMinMax",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948gzbs",
+    "label": "gyro Z bias rad/s",
+    "type": "number",
+    "default": 0,
+    "description": "gyro Z axis bias correction in rad/s",
+    "category": "imu",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948hdoff",
+    "label": "heading offset deg",
+    "type": "number",
+    "default": 0,
+    "description": "heading offset in degrees (mount correction)",
+    "category": "imu",
+    "capabilities": {
+      "imuhasmag": "true"
+    }
+  }
+]

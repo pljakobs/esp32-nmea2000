@@ -44,7 +44,7 @@
     {
         "name": "useAdminPass",
         "type": "boolean",
-        "default": "true",
+        "default": "false",
         "description": "use a password for config modifications",
         "category": "system"
     },
