@@ -11,6 +11,7 @@
 #include "GwUserCode.h"
 #include "GwSynchronized.h"
 #include <Arduino.h>
+#include <ctype.h>
 #include <vector>
 #include <map>
 #include "GwCounter.h"
@@ -21,6 +22,16 @@
 std::vector<GwUserTask> userTasks;
 std::vector<GwUserTask> initTasks;
 GwUserCode::Capabilities userCapabilities;
+
+static String taskStatusKey(const String &name) {
+    String key = "stack_";
+    for (size_t i = 0; i < name.length(); i++) {
+        char c = name.charAt(i);
+        if (isalnum((unsigned char)c) || c == '_' || c == '-') key += c;
+        else key += '_';
+    }
+    return key;
+}
 
 template <typename V>
 bool taskExists(V &list, const String &name){
@@ -366,7 +377,7 @@ void userTaskStart(void *p){
 }
 void GwUserCode::startAddOnTask(GwApiInternal *api,GwUserTask *task,int sourceId,String name){
     task->api=new TaskApi(api,sourceId,mainLock,name,taskData);
-    xTaskCreate(userTaskStart,name.c_str(),task->stackSize,task,3,NULL);
+    xTaskCreate(userTaskStart,name.c_str(),task->stackSize,task,3,&(task->handle));
 }
 void GwUserCode::startUserTasks(int baseId){
     LOG_DEBUG(GwLog::DEBUG,"starting %d user tasks",userTasks.size());
@@ -400,13 +411,16 @@ GwUserCode::Capabilities * GwUserCode::getCapabilities(){
 
 void GwUserCode::fillStatus(GwJsonDocument &status){
     for (auto it=userTasks.begin();it != userTasks.end();it++){
+        if (it->handle != NULL){
+            status[taskStatusKey(it->name)] = (long)(uxTaskGetStackHighWaterMark(it->handle) * sizeof(StackType_t));
+        }
         if (it->api){
             it->api->fillStatus(status);
         }
     }
 }
 int GwUserCode::getJsonSize(){
-    int rt=0;
+    int rt=JSON_OBJECT_SIZE(userTasks.size()) + (userTasks.size() * 24);
     for (auto it=userTasks.begin();it != userTasks.end();it++){
         if (it->api){
             rt+=it->api->getJsonSize();

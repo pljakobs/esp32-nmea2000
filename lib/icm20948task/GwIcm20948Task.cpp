@@ -16,7 +16,7 @@
 #define IMU_TYPE_MPU6050  1
 #define IMU_TYPE_ICM20948 2
 // FreeRTOS stack depth is in words (4 bytes on ESP32), not bytes.
-#define IMU_TASK_STACK_WORDS 3000
+#define IMU_TASK_STACK_WORDS 6000
 
 #ifndef GWIIC_SDA
 #define GWIIC_SDA -1

@@ -21,6 +21,7 @@ class GwUserTask{
         GwUserTaskFunction usertask=NULL;
         bool isUserTask=false;
         GwApiInternal *api=NULL;
+        TaskHandle_t handle=NULL;
         int stackSize=2000;
         int order=0;
         GwUserTask(String name,TaskFunction_t task,int stackSize=DEFAULT_STACKSIZE){

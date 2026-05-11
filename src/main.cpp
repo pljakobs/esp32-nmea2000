@@ -150,6 +150,7 @@ Preferences preferences;             // Nonvolatile storage on ESP32 - To store 
 N2kDataToNMEA0183 *nmea0183Converter=NULL;
 NMEA0183DataToN2K *toN2KConverter=NULL;
 SemaphoreHandle_t mainLock;
+TaskHandle_t gwLoopTaskHandle=NULL;
 
 
 GwRequestQueue mainQueue(&logger,20);
@@ -446,7 +447,7 @@ public:
 protected:
   virtual void processRequest()
   {
-    GwJsonDocument status(305 + 
+    GwJsonDocument status(512 + 
       countNMEA2KIn.getJsonSize()+
       countNMEA2KOut.getJsonSize() +
       channels.getJsonSize()+
@@ -466,6 +467,9 @@ protected:
     status["chipid"]=CONFIG_IDF_FIRMWARE_CHIP_ID;
     status["heap"]=(long)xPortGetFreeHeapSize();
     status["tasks"]=(long)uxTaskGetNumberOfTasks();
+    if (gwLoopTaskHandle != NULL) {
+      status["stack_loop"]=(long)(uxTaskGetStackHighWaterMark(gwLoopTaskHandle) * sizeof(StackType_t));
+    }
     Nmea2kTwai::Status n2kState=NMEA2000.getStatus();
     Nmea2kTwai::STATE driverState=n2kState.state;
     if (driverState == Nmea2kTwai::ST_RUNNING){
@@ -990,8 +994,7 @@ void setup() {
   logger.logDebug(GwLog::LOG,"setup done");
   #ifdef OWN_LOOP
   logger.logDebug(GwLog::LOG,"starting own main loop");
-  // Stack depth is in FreeRTOS words (4 bytes on ESP32).
-  xTaskCreateUniversal(loopFunction,"loop",6144,NULL,1,NULL,ARDUINO_RUNNING_CORE);
+  xTaskCreateUniversal(loopFunction,"loop",8192,NULL,1,&gwLoopTaskHandle,ARDUINO_RUNNING_CORE);
   #endif
 }  
 //*****************************************************************************
