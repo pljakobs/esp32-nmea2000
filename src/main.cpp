@@ -465,6 +465,7 @@ protected:
     status["fwtype"]= firmwareType;
     status["chipid"]=CONFIG_IDF_FIRMWARE_CHIP_ID;
     status["heap"]=(long)xPortGetFreeHeapSize();
+    status["tasks"]=(long)uxTaskGetNumberOfTasks();
     Nmea2kTwai::Status n2kState=NMEA2000.getStatus();
     Nmea2kTwai::STATE driverState=n2kState.state;
     if (driverState == Nmea2kTwai::ST_RUNNING){
