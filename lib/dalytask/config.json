@@ -1,0 +1,56 @@
+[
+  {
+    "name": "dalyEnabled",
+    "label": "enable Daly task",
+    "type": "boolean",
+    "default": "false",
+    "description": "enable the Daly BLE battery monitor task",
+    "category": "daly"
+  },
+  {
+    "name": "dalyName",
+    "label": "battery name",
+    "type": "string",
+    "default": "DalyBattery",
+    "description": "label for the Daly battery monitor",
+    "category": "daly"
+  },
+  {
+    "name": "dalyMac",
+    "label": "BLE MAC",
+    "type": "string",
+    "default": "",
+    "description": "BLE MAC address of the Daly BMS",
+    "category": "daly"
+  },
+  {
+    "name": "dalyPollIntv",
+    "label": "poll interval",
+    "type": "number",
+    "default": 5000,
+    "min": 500,
+    "max": 60000,
+    "check": "checkMinMax",
+    "description": "poll interval in milliseconds",
+    "category": "daly"
+  },
+  {
+    "name": "dalyInst",
+    "label": "battery instance",
+    "type": "number",
+    "default": 0,
+    "min": 0,
+    "max": 255,
+    "check": "checkMinMax",
+    "description": "NMEA2000 battery instance id",
+    "category": "daly"
+  },
+  {
+    "name": "dalyDebug",
+    "label": "debug logging",
+    "type": "boolean",
+    "default": "false",
+    "description": "enable placeholder Daly task debug logs",
+    "category": "daly"
+  }
+]
