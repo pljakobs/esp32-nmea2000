@@ -8,6 +8,7 @@
 #include "NMEA0183AIStoNMEA2000.h"
 #include "GwXDRMappings.h"
 #include "GwNmea0183Msg.h"
+#include <math.h>
 
 static const double mToFathoms=0.546806649;
 static const double mToFeet=3.2808398950131;
@@ -43,6 +44,242 @@ private:
     const size_t MAXWAYPOINTS=100;
     std::map<String,WaypointNumber> waypointMap;
     uint8_t waypointId=1;
+
+    class StableLeg {
+    public:
+        bool valid=false;
+        int side=0;
+        unsigned long firstMs=0;
+        unsigned long lastMs=0;
+        int count=0;
+        double sumHx=0;
+        double sumHy=0;
+        double sumAx=0;
+        double sumAy=0;
+    };
+
+    StableLeg currentLeg;
+    StableLeg previousLeg;
+    bool tackInProgress=false;
+    int tackToSide=0;
+    unsigned long tackNewSideStableSince=0;
+    unsigned long tackStartMs=0;
+    double tackStartHeading=N2kDoubleNA;
+    double maxTackHeadingDelta=0;
+
+    bool headingSampleValid=false;
+    double lastHeading=N2kDoubleNA;
+    unsigned long lastHeadingMs=0;
+
+    bool learnedAwaCorrValid=false;
+    double learnedAwaCorr=0;
+    int acceptedTacks=0;
+    int16_t awaCorrState=0;
+
+    static constexpr int STABLE_TACKS_REQUIRED = 3;
+
+    static constexpr double SIDE_DEADBAND_RAD = (10.0 * M_PI) / 180.0;
+    static constexpr double MAX_STABLE_TURN_RATE_RAD_S = (4.0 * M_PI) / 180.0;
+    static constexpr double MIN_TACK_ANGLE_RAD = (90.0 * M_PI) / 180.0;
+    static constexpr double MAX_TACK_ANGLE_RAD = (150.0 * M_PI) / 180.0;
+    static constexpr double MAX_CORR_RESIDUAL_RAD = (20.0 * M_PI) / 180.0;
+    static constexpr double SYMMETRY_SCALE_RAD = (30.0 * M_PI) / 180.0;
+    static constexpr double MIN_AWS_M_S = 1.5; // ~3 kn
+    static constexpr unsigned long MIN_STABLE_LEG_MS = 120000;
+    static constexpr unsigned long SETTLE_AFTER_TACK_MS = 30000;
+    static constexpr unsigned long MAX_TACK_TIME_MS = 180000;
+    static constexpr int MIN_STABLE_SAMPLES = 30;
+
+    static double wrapPi(double v) {
+        while (v <= -M_PI) v += 2 * M_PI;
+        while (v > M_PI) v -= 2 * M_PI;
+        return v;
+    }
+    static double wrap2Pi(double v) {
+        while (v < 0) v += 2 * M_PI;
+        while (v >= 2 * M_PI) v -= 2 * M_PI;
+        return v;
+    }
+    static double circMean(double a, double b) {
+        return atan2(sin(a) + sin(b), cos(a) + cos(b));
+    }
+    static int sideFromAwa(double awa) {
+        double signedAwa = wrapPi(awa);
+        if (signedAwa > SIDE_DEADBAND_RAD) return 1;
+        if (signedAwa < -SIDE_DEADBAND_RAD) return -1;
+        return 0;
+    }
+    void updateLearnState(int sourceId) {
+        int16_t nextState = (acceptedTacks >= STABLE_TACKS_REQUIRED) ? 1 : 0;
+        if (nextState != awaCorrState) {
+            awaCorrState = nextState;
+        }
+        boatData->AWACorrState->update(awaCorrState, sourceId);
+    }
+
+    void resetLeg(StableLeg &leg, int side, unsigned long now) {
+        leg.valid = true;
+        leg.side = side;
+        leg.firstMs = now;
+        leg.lastMs = now;
+        leg.count = 0;
+        leg.sumHx = 0;
+        leg.sumHy = 0;
+        leg.sumAx = 0;
+        leg.sumAy = 0;
+    }
+    void addLegSample(StableLeg &leg, double heading, double awa, unsigned long now) {
+        if (!leg.valid) return;
+        leg.lastMs = now;
+        leg.count++;
+        leg.sumHx += cos(heading);
+        leg.sumHy += sin(heading);
+        leg.sumAx += cos(wrapPi(awa));
+        leg.sumAy += sin(wrapPi(awa));
+    }
+    bool legIsUsable(const StableLeg &leg) const {
+        if (!leg.valid) return false;
+        if (leg.count < MIN_STABLE_SAMPLES) return false;
+        return (leg.lastMs - leg.firstMs) >= MIN_STABLE_LEG_MS;
+    }
+    double legMeanHeading(const StableLeg &leg) const {
+        return atan2(leg.sumHy, leg.sumHx);
+    }
+    double legMeanAwa(const StableLeg &leg) const {
+        return atan2(leg.sumAy, leg.sumAx);
+    }
+    bool isHeadingStable(double heading, unsigned long now) {
+        bool stable = true;
+        if (headingSampleValid) {
+            unsigned long dtMs = now - lastHeadingMs;
+            if (dtMs > 0) {
+                double dH = wrapPi(heading - lastHeading);
+                double rate = fabs(dH) / (((double)dtMs) / 1000.0);
+                stable = rate <= MAX_STABLE_TURN_RATE_RAD_S;
+            }
+        }
+        headingSampleValid = true;
+        lastHeading = heading;
+        lastHeadingMs = now;
+        return stable;
+    }
+
+    void applyLearnedTackCorrection(const StableLeg &before, const StableLeg &after, int sourceId) {
+        double h1 = legMeanHeading(before);
+        double h2 = legMeanHeading(after);
+        double tackAngle = fabs(wrapPi(h2 - h1));
+        if (tackAngle < MIN_TACK_ANGLE_RAD || tackAngle > MAX_TACK_ANGLE_RAD) return;
+
+        double a1 = legMeanAwa(before);
+        double a2 = legMeanAwa(after);
+        double twd = circMean(h1, h2);
+        double e1 = wrapPi(a1 - wrapPi(twd - h1));
+        double e2 = wrapPi(a2 - wrapPi(twd - h2));
+        double estimatedCorr = circMean(e1, e2);
+
+        if (!learnedAwaCorrValid) {
+            learnedAwaCorr = estimatedCorr;
+            learnedAwaCorrValid = true;
+            acceptedTacks = 1;
+            boatData->AWACorr->update(learnedAwaCorr, sourceId);
+            updateLearnState(sourceId);
+            return;
+        }
+
+        double residual = wrapPi(estimatedCorr - learnedAwaCorr);
+        if (fabs(residual) > MAX_CORR_RESIDUAL_RAD) return;
+
+        double symmetry = fabs(fabs(a1) - fabs(a2));
+        double quality = 1.0 - fmin(1.0, symmetry / SYMMETRY_SCALE_RAD);
+        double alpha = 0.06 * quality;
+        if (alpha < 0.01) alpha = 0.01;
+
+        learnedAwaCorr = wrapPi(learnedAwaCorr + (alpha * residual));
+        acceptedTacks++;
+        boatData->AWACorr->update(learnedAwaCorr, sourceId);
+        updateLearnState(sourceId);
+    }
+
+    double learnAndCorrectAwa(double rawAwa, double aws, int sourceId) {
+        unsigned long now = millis();
+        updateLearnState(sourceId);
+        if (!learnedAwaCorrValid && boatData->AWACorr->isValid(now)) {
+            learnedAwaCorr = boatData->AWACorr->getData();
+            learnedAwaCorrValid = true;
+        }
+
+        if (!boatData->HDT->isValid(now) || aws < MIN_AWS_M_S) {
+            return learnedAwaCorrValid ? wrap2Pi(rawAwa - learnedAwaCorr) : rawAwa;
+        }
+
+        double heading = boatData->HDT->getData();
+        bool stableHeading = isHeadingStable(heading, now);
+        int side = sideFromAwa(rawAwa);
+        if (side == 0) {
+            return learnedAwaCorrValid ? wrap2Pi(rawAwa - learnedAwaCorr) : rawAwa;
+        }
+
+        if (!currentLeg.valid) {
+            resetLeg(currentLeg, side, now);
+        }
+
+        if (!tackInProgress) {
+            if (side == currentLeg.side) {
+                if (stableHeading) {
+                    addLegSample(currentLeg, heading, rawAwa, now);
+                }
+            } else {
+                if (legIsUsable(currentLeg)) {
+                    previousLeg = currentLeg;
+                    tackInProgress = true;
+                    tackToSide = side;
+                    tackStartMs = now;
+                    tackStartHeading = heading;
+                    maxTackHeadingDelta = 0;
+                    tackNewSideStableSince = stableHeading ? now : 0;
+                    resetLeg(currentLeg, side, now);
+                } else {
+                    resetLeg(currentLeg, side, now);
+                }
+            }
+        } else {
+            if (tackStartHeading != N2kDoubleNA) {
+                double d = fabs(wrapPi(heading - tackStartHeading));
+                if (d > maxTackHeadingDelta) maxTackHeadingDelta = d;
+            }
+
+            if ((now - tackStartMs) > MAX_TACK_TIME_MS) {
+                tackInProgress = false;
+                resetLeg(currentLeg, side, now);
+                return learnedAwaCorrValid ? wrap2Pi(rawAwa - learnedAwaCorr) : rawAwa;
+            }
+
+            if (side != tackToSide) {
+                tackNewSideStableSince = 0;
+                resetLeg(currentLeg, side, now);
+                return learnedAwaCorrValid ? wrap2Pi(rawAwa - learnedAwaCorr) : rawAwa;
+            }
+
+            if (!stableHeading) {
+                tackNewSideStableSince = 0;
+                return learnedAwaCorrValid ? wrap2Pi(rawAwa - learnedAwaCorr) : rawAwa;
+            }
+
+            if (tackNewSideStableSince == 0) tackNewSideStableSince = now;
+            if ((now - tackNewSideStableSince) >= SETTLE_AFTER_TACK_MS) {
+                addLegSample(currentLeg, heading, rawAwa, now);
+            }
+
+            if (legIsUsable(currentLeg)) {
+                if (maxTackHeadingDelta >= MIN_TACK_ANGLE_RAD) {
+                    applyLearnedTackCorrection(previousLeg, currentLeg, sourceId);
+                }
+                tackInProgress = false;
+            }
+        }
+
+        return learnedAwaCorrValid ? wrap2Pi(rawAwa - learnedAwaCorr) : rawAwa;
+    }
     
     uint8_t getWaypointId(const char *name){
         String wpName(name);
@@ -143,7 +380,7 @@ private:
      */
     GwXDRFoundMapping getOtherFieldMapping(GwXDRFoundMapping &found, int field){
         if (found.empty) return GwXDRFoundMapping();
-        return xdrMappings->getMapping(found.definition->category,
+        return xdrMappings->getMapping(0,found.definition->category,
             found.definition->selector,
             field,
             found.instanceId);
@@ -351,8 +588,8 @@ private:
                 rmb.vmg
             );
             send(n2kMsg,msg.sourceId);
-            SetN2kPGN129285(n2kMsg,sourceId,1,1,true,true,"default");
-            AppendN2kPGN129285(n2kMsg,destinationId,rmb.destID,rmb.latitude,rmb.longitude);
+            SetN2kRouteWPInfo(n2kMsg,sourceId,1,1,N2kdir_forward,"default");
+            AppendN2kRouteWPInfo(n2kMsg,destinationId,rmb.destID,rmb.latitude,rmb.longitude);
             send(n2kMsg,msg.sourceId);
             }
     }
@@ -413,16 +650,21 @@ private:
         }
         tN2kMsg n2kMsg;
         bool shouldSend=false;
-        WindAngle=formatDegToRad(WindAngle);
         GwConverterConfig::WindMapping mapping;
         switch(Reference){
             case NMEA0183Wind_Apparent:
+                WindAngle+=(double)180;
+                while(WindAngle>360) {WindAngle-=360;}
+                while(WindAngle<0) {WindAngle+=360;}
+                WindAngle=formatDegToRad(WindAngle);
+                WindAngle=learnAndCorrectAwa(WindAngle,WindSpeed,msg.sourceId);
                 shouldSend=updateDouble(boatData->AWA,WindAngle,msg.sourceId) && 
                            updateDouble(boatData->AWS,WindSpeed,msg.sourceId);
                 if (WindSpeed != NMEA0183DoubleNA) boatData->MaxAws->updateMax(WindSpeed,msg.sourceId);    
                 mapping=config.findWindMapping(GwConverterConfig::WindMapping::AWA_AWS);
                 break;
             case NMEA0183Wind_True:
+                WindAngle=formatDegToRad(WindAngle);
                 shouldSend=updateDouble(boatData->TWA,WindAngle,msg.sourceId) && 
                            updateDouble(boatData->TWS,WindSpeed,msg.sourceId);
                 if (WindSpeed != NMEA0183DoubleNA) boatData->MaxTws->updateMax(WindSpeed,msg.sourceId);    
@@ -469,6 +711,7 @@ private:
         }
         tN2kMsg n2kMsg;
         bool shouldSend = false;
+        WindAngle = learnAndCorrectAwa(WindAngle, WindSpeed, msg.sourceId);
         shouldSend = updateDouble(boatData->AWA, WindAngle, msg.sourceId) &&
                      updateDouble(boatData->AWS, WindSpeed, msg.sourceId);
         if (WindSpeed != NMEA0183DoubleNA) boatData->MaxAws->updateMax(WindSpeed,msg.sourceId);             
@@ -638,8 +881,8 @@ private:
         for (int i=0;i< 3;i++){
             if (msg.FieldLen(0)>0){
                 Depth=atof(msg.Field(0));
-                char dt=msg.Field(i+1)[0];
-                switch(dt){
+                char du=msg.Field(i+1)[0];
+                switch(du){
                     case 'f':
                         Depth=Depth/mToFeet;
                         break;
@@ -662,8 +905,9 @@ private:
                 //we can only send if we have a valid depth beloww tranducer
                 //to compute the offset
                 if (! boatData->DBT->isValid()) return;
-                double offset=Depth-boatData->DBT->getData();
-                if (offset >= 0 && dt == DBT){
+                double dbt=boatData->DBT->getData();
+                double offset=Depth-dbt;
+                if (offset >= 0 && dt == DBK){
                     logger->logDebug(GwLog::DEBUG, "strange DBK - more depth then transducer %s", msg.line);    
                     return;
                 }
@@ -675,8 +919,8 @@ private:
                     if (! boatData->DBS->update(Depth,msg.sourceId)) return;
                 }
                 tN2kMsg n2kMsg;
-                SetN2kWaterDepth(n2kMsg,1,Depth,offset);
-                send(n2kMsg,msg.sourceId,(n2kMsg.PGN)+String((offset != N2kDoubleNA)?1:0));
+                SetN2kWaterDepth(n2kMsg,1,dbt,offset); //on the N2K side we always have depth below transducer
+                send(n2kMsg,msg.sourceId,(n2kMsg.PGN)+String((offset >=0)?1:0));
             }            
         }        
     }

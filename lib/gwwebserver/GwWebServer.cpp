@@ -29,6 +29,9 @@ void sendEmbeddedFile(String name,String contentType,AsyncWebServerRequest *requ
       EmbeddedFile* found=it->second;
       AsyncWebServerResponse *response=request->beginResponse_P(200,contentType,found->start,found->len);
       response->addHeader(F("Content-Encoding"), F("gzip"));
+      response->addHeader(F("Cache-Control"), F("no-store, no-cache, must-revalidate, max-age=0"));
+      response->addHeader(F("Pragma"), F("no-cache"));
+      response->addHeader(F("Expires"), F("0"));
       request->send(response);
     }
     else{

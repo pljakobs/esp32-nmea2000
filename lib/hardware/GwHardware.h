@@ -2,7 +2,7 @@
   This code is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
   License as published by the Free Software Foundation; either
-  version 2.1 of the License, or (at your option) any later version.
+  version 2 of the License, or (at your option) any later version.
   This code is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
@@ -20,11 +20,7 @@
 #endif
 #ifndef _GWHARDWARE_H
 #define _GWHARDWARE_H
-#define GWSERIAL_TYPE_UNI 1
-#define GWSERIAL_TYPE_BI 2
-#define GWSERIAL_TYPE_RX 3
-#define GWSERIAL_TYPE_TX 4
-#define GWSERIAL_TYPE_UNK 0
+#include "GwChannelModes.h"
 #include <GwConfigItem.h>
 #include <HardwareSerial.h>
 #include "GwAppInfo.h"
@@ -100,6 +96,16 @@
   #define USBSerial Serial
 #endif
 
+//Devkitm-C3
+#ifdef PLATFORM_BOARD_ESP32_C3_DEVKITM_1
+  #ifdef ARDUINO_USB_CDC_ON_BOOT
+    #if ARDUINO_USB_CDC_ON_BOOT == 1
+      #define USBSerial Serial
+    #endif
+  #endif
+#endif
+
+
 #ifdef BOARD_M5ATOM
 #define M5_CAN_KIT
 //150mA if we power from the bus
@@ -161,6 +167,12 @@
 #define GWBUTTON_ACTIVE LOW
 //if GWBUTTON_PULLUPDOWN we enable a pulup/pulldown
 #define GWBUTTON_PULLUPDOWN 
+#endif
+#ifdef BOARD_PJ
+#define ESP32_CAN_TX_PIN GPIO_NUM_16
+#define ESP32_CAN_RX_PIN GPIO_NUM_17
+#define GWSERIAL_RX 35
+#define GWSERIAL_MODE "RX"
 #endif
 
 #ifdef BOARD_PJ
@@ -237,6 +249,4 @@
 #else
   CFG_INIT(ledBrightness,"64",HIDDEN)
 #endif
-
-
 #endif

@@ -3,7 +3,7 @@
   This code is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
   License as published by the Free Software Foundation; either
-  version 2.1 of the License, or (at your option) any later version.
+  version 2 of the License, or (at your option) any later version.
   This code is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
@@ -71,9 +71,15 @@ class GwConverterConfig{
       int rmcInterval=1000;
       int rmcCheckTime=4000;
       int winst312=256;
+      std::map<int,float> waterTempOffsets;
       bool unmappedXdr=false;
       unsigned long xdrTimeout=60000;
       std::vector<WindMapping> windMappings;
+      float getWaterTempOffset(int instance) const {
+        auto it = waterTempOffsets.find(instance);
+        if (it == waterTempOffsets.end()) return 0.0f;
+        return it->second;
+      }
       void init(GwConfigHandler *config, GwLog*logger){
         minXdrInterval=config->getInt(GwConfigDefinitions::minXdrInterval,100);
         xdrTimeout=config->getInt(GwConfigDefinitions::timoSensor);
@@ -88,6 +94,26 @@ class GwConverterConfig{
         if (rmcInterval > 0 && rmcInterval <100) rmcInterval=100;
         unmappedXdr=config->getBool(GwConfigDefinitions::unknownXdr);
         winst312=config->getInt(GwConfigDefinitions::winst312,256);
+        waterTempOffsets.clear();
+        String waterTempOffsetConfig=config->getString(GwConfigDefinitions::wTempOffsets);
+        int start=0;
+        while (start < waterTempOffsetConfig.length()) {
+          int end=waterTempOffsetConfig.indexOf(',',start);
+          if (end < 0) end=waterTempOffsetConfig.length();
+          String entry=waterTempOffsetConfig.substring(start,end);
+          entry.trim();
+          if (entry.length() > 0) {
+            int sep=entry.indexOf('=');
+            if (sep > 0) {
+              String key=entry.substring(0,sep);
+              String value=entry.substring(sep+1);
+              key.trim();
+              value.trim();
+              waterTempOffsets[key.toInt()]=value.toFloat();
+            }
+          }
+          start=end+1;
+        }
         for (auto && it:windConfigs){
           String cfg=config->getString(it.second);
           WindMapping mapping(it.first,cfg);

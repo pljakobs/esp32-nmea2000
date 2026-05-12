@@ -58,6 +58,7 @@ class GwBoatItemBase{
         GWSC(formatRot);
         GWSC(formatDate);
         GWSC(formatTime);
+        GWSC(formatLearnState);
     protected:
         int type;
         unsigned long lastSet=0;
@@ -129,6 +130,7 @@ double formatCourse(double cv);
 double formatDegToRad(double deg);
 double formatWind(double cv);
 double formatKnots(double cv);
+double formatKmh(double cv);
 uint32_t mtr2nm(uint32_t m);
 double mtr2nm(double m);
 
@@ -205,6 +207,8 @@ class GwBoatData{
     GWBOATDATA(double,VAR,formatWind) // variation
     GWBOATDATA(double,DEV,formatWind) // deviation
     GWBOATDATA(double,AWA,formatWind) // apparent wind ANGLE
+    GWBOATDATAT(double,AWACorr,GwBoatItemBase::TOType::keep,formatWind) // learned apparent wind correction
+    GWBOATDATAT(int16_t,AWACorrState,GwBoatItemBase::TOType::keep,formatLearnState) // 0=LEARN,1=STABLE
     GWBOATDATA(double,AWS,formatKnots) // apparent wind speed
     GWBOATDATAT(double,MaxAws,GwBoatItemBase::TOType::keep,formatKnots)
     GWBOATDATA(double,TWD,formatCourse) // true wind DIRECTION

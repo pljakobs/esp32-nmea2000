@@ -3,7 +3,7 @@
   This code is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
   License as published by the Free Software Foundation; either
-  version 2.1 of the License, or (at your option) any later version.
+  version 2 of the License, or (at your option) any later version.
   This code is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
@@ -18,8 +18,12 @@
 #include "GwTimer.h"
 #include "GwHardware.h"
 
+#if GWSPI1_HOST != GWSPI_UNDEFINED
 static SPIBus bus1(GWSPI1_HOST);
+#endif
+#if GWSPI2_HOST != GWSPI_UNDEFINED
 static SPIBus bus2(GWSPI2_HOST);
+#endif
 
 #ifdef GWSPI1_CLK
 static const int spi1clk=GWSPI1_CLK;
@@ -65,6 +69,7 @@ void runSpiTask(GwApi *api){
         if (bus == buses.end()){
             switch (busId)
             {
+#if GWSPI1_HOST != GWSPI_UNDEFINED
             case GWSPI1_HOST:
                 if (spi1clk < 0){
                     LOG_DEBUG(GwLog::ERROR,"SPI bus 1 not configured, cannot create %s",sensor->prefix.c_str());
@@ -75,6 +80,8 @@ void runSpiTask(GwApi *api){
                     }
                 }
                 break;
+#endif
+#if GWSPI2_HOST != GWSPI_UNDEFINED
             case GWSPI2_HOST:
                 if (spi2clk < 0){
                     LOG_DEBUG(GwLog::ERROR,"SPI bus 2 not configured, cannot create %s",sensor->prefix.c_str());
@@ -85,6 +92,7 @@ void runSpiTask(GwApi *api){
                     }
                 }
                 break;
+#endif
             default:
                 LOG_DEBUG(GwLog::ERROR,"invalid busid %d for %s",busId,sensor->prefix.c_str());
             }

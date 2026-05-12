@@ -43,6 +43,10 @@ What is included
 
 For the details of the mapped PGNs and NMEA sentences refer to [Conversions](doc/Conversions.pdf).
 
+License
+-------
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either [version 2 of the License](LICENSE), or (at your option) any later version.
+
 Hardware
 --------
 The software is prepared to run on different kinds of ESP32 based modules and accessoirs. For some of them prebuild binaries are available that only need to be flashed, others would require to add some definitions of the used PINs and features and to build the binary.
@@ -68,12 +72,12 @@ Initial Flash
 __Browser__
 
 If you run a system with a modern Chrome or Edge Browser you can directly flash your device from within the browser.
-Just go to the [Flash Page](https://wellenvogel.github.io/esp32-nmea2000/install.html) and select the "Initial" flash for your Hardware. This will install the most current software to your device.
+Just go to the [Flash Page](https://wellenvogel.de/software/esp32/install.html) and select the "Initial" flash for your Hardware. This will install the most current software to your device. If you are using a forked project (like OBP60) refer to the documentation of the fork. You can just install any flash binary from your local computer with the browser based installation using the "upload" button.<br>
 If you are on Windows you will need to have the correct driver installed before (see below at [windows users](#windows) - only install the driver, not the flashtool).
 
 You can also install an update from the flash page but normally it is easier to do this from the Web Gui of the device (see [below](#update)).
 
-The [Flash Page](https://wellenvogel.github.io/esp32-nmea2000/install.html) will also allow you to open a console window to your ESP32.
+The [Flash Page](https://wellenvogel.de/software/esp32/install.html) will also allow you to open a console window to your ESP32.
 
 __Tool based__
 
@@ -170,6 +174,31 @@ For details refer to the [example description](lib/exampletask/Readme.md).
 
 Changelog
 ---------
+[20251126](../../releases/tag/20251126)
+* fix a bug in the Actisense reader that could lead to an endless loop (making the device completely non responsive)
+* upgrade to 4.24.1 of the NMEA2000 library (2025/11/01) - refer to the [changes](https://github.com/ttlappalainen/NMEA2000/blob/master/Documents/src/changes.md) - Especially UTF8 support
+*********
+[20251007](../../releases/tag/20251007)
+*********
+* add AIS Aton translations (PGN 129041 <-> Ais class 21)
+* improved mapping of AIS transducer information (NMEA2000) to AIS channel and Talker on NMEA0183
+* use a forked version of the NMEA2000 library (as an intermediate workaround)
+* [#114](../../issues/114) correctly translate AIS type 1/3 from PGN 129038
+* add support for a generic S3 build in the build UI
+* [#117](../../issues/117) add support for a transmit enable pin for RS 485 conections (also in the build UI)
+* [#116](../../issues/116) SDA and SCL are swapped in the build UI
+* [#112](../../issues/112) clearify licenses
+* [#110](../../issues/110) / [#115](../../pull/115) support for the M5 GPS unit v1.1
+* [#102](../../issues/102) optimize Wifi reconnect handling
+* [#111](../../pull/111) allow for a custom python build script
+* [#113](../../issues/113) support for M5 stack Env4
+
+[20250305](../../releases/tag/20250305)
+*********
+* better handling for reconnect to a raspberry pi after reset [#102](../../issues/102)
+* introduce _custom_config_, _custom_js_, _custom_css_, refer to [extending the core](lib/exampletask/Readme.md) [#100](../../pull/100)
+* create VWR [#103](../../issues/103)
+
 [20241128](../../releases/tag/20241128)
 *********
 * additional correction for: USB connection on S3 stops [#81](../../issues/81)

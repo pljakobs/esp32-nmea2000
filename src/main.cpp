@@ -3,7 +3,7 @@
   This code is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
   License as published by the Free Software Foundation; either
-  version 2.1 of the License, or (at your option) any later version.
+  version 2 of the License, or (at your option) any later version.
   This code is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
@@ -72,9 +72,9 @@ const unsigned long HEAP_REPORT_TIME=2000; //set to 0 to disable heap reporting
 #define MAX_NMEA2000_MESSAGE_SEASMART_SIZE 500
 #define MAX_NMEA0183_MESSAGE_SIZE MAX_NMEA2000_MESSAGE_SEASMART_SIZE
 //assert length of firmware name and version
-CASSERT(strlen(FIRMWARE_TYPE) <= 32, "environment name (FIRMWARE_TYPE) must not exceed 32 chars");
-CASSERT(strlen(VERSION) <= 32, "VERSION must not exceed 32 chars");
-CASSERT(strlen(IDF_VERSION) <= 32,"IDF_VERSION must not exceed 32 chars");
+CASSERT(strlen(FIRMWARE_TYPE) <= 31, "environment name (FIRMWARE_TYPE) must not exceed 32 chars");
+CASSERT(strlen(VERSION) <= 31, "VERSION must not exceed 32 chars");
+CASSERT(strlen(IDF_VERSION) <= 31,"IDF_VERSION must not exceed 32 chars");
 //https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/app_image_format.html
 //and removed the bugs in the doc...
 __attribute__((section(".rodata_custom_desc"))) esp_app_desc_t custom_app_desc = { 
@@ -140,6 +140,7 @@ GwWifi gwWifi(&config,&logger,fixedApPass);
 GwChannelList channels(&logger,&config);
 GwBoatData boatData(&logger,&config);
 GwXDRMappings xdrMappings(&logger,&config);
+GwConverterConfig converterConfig;
 bool sendOutN2k=true;
 
 
@@ -149,6 +150,7 @@ Preferences preferences;             // Nonvolatile storage on ESP32 - To store 
 N2kDataToNMEA0183 *nmea0183Converter=NULL;
 NMEA0183DataToN2K *toN2KConverter=NULL;
 SemaphoreHandle_t mainLock;
+TaskHandle_t gwLoopTaskHandle=NULL;
 
 
 GwRequestQueue mainQueue(&logger,20);
@@ -165,6 +167,25 @@ bool checkPass(String hash){
 
 GwUpdate updater(&logger,&webserver,&checkPass);
 GwConfigInterface *systemName=config.getConfigItem(config.systemName,true);
+
+static bool buildLowrance65285As130312(const tN2kMsg &inMsg, tN2kMsg &outMsg) {
+  if (inMsg.PGN != 65285UL) return false;
+  if (inMsg.DataLen < 5) return false;
+
+  int idx = 0;
+  uint16_t header = inMsg.Get2ByteUInt(idx);
+  uint16_t manufacturerCode = header & 0x07ff;
+  uint8_t industryCode = (header >> 13) & 0x07;
+  if (manufacturerCode != 140 || industryCode != 4) return false;
+
+  uint8_t temperatureSource = inMsg.GetByte(idx);
+  uint16_t rawTemperature = inMsg.Get2ByteUInt(idx);
+  if (rawTemperature == 0xffff) return false;
+
+  const double temperatureK = (((double)rawTemperature) * 0.01) + converterConfig.getWaterTempOffset(0);
+  SetN2kPGN130312(outMsg, 1, 0, (tN2kTempSource)temperatureSource, temperatureK, N2kDoubleNA);
+  return true;
+}
 
 
 void handleN2kMessage(const tN2kMsg &n2kMsg,int sourceId, bool isConverted=false)
@@ -202,6 +223,20 @@ void handleN2kMessage(const tN2kMsg &n2kMsg,int sourceId, bool isConverted=false
   if (! isConverted){
     nmea0183Converter->HandleMsg(n2kMsg,sourceId);
   }
+
+  if (sourceId == N2K_CHANNEL_ID && sendOutN2k) {
+    tN2kMsg mappedMsg;
+    if (buildLowrance65285As130312(n2kMsg, mappedMsg)) {
+      if (NMEA2000.SendMsg(mappedMsg)) {
+        countNMEA2KOut.add(mappedMsg.PGN);
+        logger.logDebug(GwLog::DEBUG + 1, "republished PGN %d as %d", n2kMsg.PGN, mappedMsg.PGN);
+      }
+      else {
+        countNMEA2KOut.addFail(mappedMsg.PGN);
+      }
+    }
+  }
+
   if (sourceId != N2K_CHANNEL_ID && sendOutN2k){
     if (NMEA2000.SendMsg(n2kMsg)){
       countNMEA2KOut.add(n2kMsg.PGN);
@@ -412,7 +447,7 @@ public:
 protected:
   virtual void processRequest()
   {
-    GwJsonDocument status(305 + 
+    GwJsonDocument status(512 + 
       countNMEA2KIn.getJsonSize()+
       countNMEA2KOut.getJsonSize() +
       channels.getJsonSize()+
@@ -431,6 +466,10 @@ protected:
     status["fwtype"]= firmwareType;
     status["chipid"]=CONFIG_IDF_FIRMWARE_CHIP_ID;
     status["heap"]=(long)xPortGetFreeHeapSize();
+    status["tasks"]=(long)uxTaskGetNumberOfTasks();
+    if (gwLoopTaskHandle != NULL) {
+      status["stack_loop"]=(long)(uxTaskGetStackHighWaterMark(gwLoopTaskHandle) * sizeof(StackType_t));
+    }
     Nmea2kTwai::Status n2kState=NMEA2000.getStatus();
     Nmea2kTwai::STATE driverState=n2kState.state;
     if (driverState == Nmea2kTwai::ST_RUNNING){
@@ -801,6 +840,7 @@ void setup() {
   MDNS.begin(config.getConfigItem(config.systemName)->asCString());
   channels.begin(fallbackSerial);
   logger.flush();
+  config.logConfig(GwLog::DEBUG);
   webserver.registerMainHandler("/api/reset", [](AsyncWebServerRequest *request)->GwRequestMessage *{
     return new ResetRequest(request->arg("_hash"));
   });
@@ -859,7 +899,6 @@ void setup() {
   webserver.begin();
   xdrMappings.begin();
   logger.flush();
-  GwConverterConfig converterConfig;
   converterConfig.init(&config,&logger);
   nmea0183Converter= N2kDataToNMEA0183::create(&logger, &boatData, 
     [](const tNMEA0183Msg &msg, int sourceId){
@@ -916,7 +955,7 @@ void setup() {
   logger.flush();
   NMEA2000.SetMode(tNMEA2000::N2km_ListenAndNode, NodeAddress);
   NMEA2000.SetForwardOwnMessages(false);
-  NMEA2000.SetHeartbeatInterval(NMEA2000_HEARTBEAT_INTERVAL);
+  NMEA2000.SetHeartbeatIntervalAndOffset(NMEA2000_HEARTBEAT_INTERVAL);
   if (sendOutN2k){
     // Set the information for other bus devices, which messages we support
     unsigned long *pgns=toN2KConverter->handledPgns();
@@ -955,7 +994,7 @@ void setup() {
   logger.logDebug(GwLog::LOG,"setup done");
   #ifdef OWN_LOOP
   logger.logDebug(GwLog::LOG,"starting own main loop");
-  xTaskCreateUniversal(loopFunction,"loop",8192,NULL,1,NULL,ARDUINO_RUNNING_CORE);
+  xTaskCreateUniversal(loopFunction,"loop",8192,NULL,1,&gwLoopTaskHandle,ARDUINO_RUNNING_CORE);
   #endif
 }  
 //*****************************************************************************

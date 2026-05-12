@@ -112,6 +112,10 @@
                             }
                         }
                         else {
+                            if (statusPage && k.indexOf('stack_') == 0) {
+                                createStatusValueDisplay(statusPage, formatStackLabel(k), k, even);
+                                even = !even;
+                            }
                             let el = document.getElementById(k);
                             if (el) el.textContent = jsonData[k];
                             forEl('.status-' + k, function (el) {
@@ -385,6 +389,20 @@
             }
         });
         callListeners(api.EVENTS.counterDisplayCreated,row);
+    }
+    function createStatusValueDisplay(parent, label, key, isEven) {
+        if (parent.querySelector("#" + key)) {
+            return;
+        }
+        let clazz = "row";
+        if (isEven) clazz += " even";
+        let row = addEl('div', clazz, parent);
+        addEl('span', 'label', row, label);
+        let value = addEl('span', 'value', row, '---');
+        value.setAttribute('id', key);
+    }
+    function formatStackLabel(key) {
+        return "Stack " + key.replace(/^stack_/, '').replace(/_/g, ' ') + " min free";
     }
     function validKey(key) {
         if (!key) return;
@@ -1630,6 +1648,14 @@
                 return formatFixed(hr, 2, 0) + ':' +
                     formatFixed(min, 2, 0) + ':' +
                     formatFixed(s, 2, 0);
+            },
+            u: ''
+        },
+        formatLearnState: {
+            f: function (v) {
+                let x = parseInt(v);
+                if (isNaN(x)) return 'LEARN';
+                return x > 0 ? 'STABLE' : 'LEARN';
             },
             u: ''
         }

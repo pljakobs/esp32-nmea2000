@@ -3,7 +3,7 @@
   This code is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
   License as published by the Free Software Foundation; either
-  version 2.1 of the License, or (at your option) any later version.
+  version 2 of the License, or (at your option) any later version.
   This code is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
@@ -112,7 +112,7 @@ class SSISensor : public SensorTemplate<BUSTYPE,SensorBase::SPI>{
                 .flags = SPI_TRANS_USE_RXDATA,
                 .cmd = 0,
                 .addr = 0,
-                .length = bits+1,
+                .length = (size_t)bits+1,
                 .rxlength = 0};
             esp_err_t ret = spi_device_queue_trans(device->device(), &ta, portMAX_DELAY);
             if (ret != ESP_OK) return ret;
@@ -136,6 +136,11 @@ class SSISensor : public SensorTemplate<BUSTYPE,SensorBase::SPI>{
     
 };
 using SpiSensorList=SensorList;
+#define GWSPI_UNDEFINED -1
 #define GWSPI1_HOST SPI2_HOST
-#define GWSPI2_HOST SPI3_HOST
+#if SOC_SPI_PERIPH_NUM > 2
+ #define GWSPI2_HOST SPI3_HOST
+#else
+ #define GWSPI2_HOST GWSPI_UNDEFINED
+#endif
 #endif

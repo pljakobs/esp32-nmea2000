@@ -14,7 +14,7 @@ Files
    * [platformio.ini](platformio.ini)<br>
     This file is completely optional.
     You only need this if you want to
-    extend the base configuration - we add a dummy library here and define one additional build environment (board)
+    extend the base configuration - we add a dummy library here and define additional build environments (boards)
    * [GwExampleTask.h](GwExampleTask.h) the name of this include must match the name of the directory (ignoring case) with a "gw" in front. This file includes our special hardware definitions and registers our task at the core.<br>
    This registration can be done statically using [DECLARE_USERTASK](https://github.com/wellenvogel/esp32-nmea2000/blob/9b955d135d74937a60f2926e8bfb9395585ff8cd/lib/api/GwApi.h#L202) in the header file. <br>
    As an alternative we just only register an [initialization function](https://github.com/wellenvogel/esp32-nmea2000/blob/9b955d135d74937a60f2926e8bfb9395585ff8cd/lib/exampletask/GwExampleTask.h#L19) using DECLARE_INITFUNCTION and later on register the task function itself via the [API](https://github.com/wellenvogel/esp32-nmea2000/blob/9b955d135d74937a60f2926e8bfb9395585ff8cd/lib/exampletask/GwExampleTask.cpp#L32).<br>
@@ -28,11 +28,13 @@ Files
 
    * [GwExampleTaks.cpp](GwExampleTask.cpp) includes the implementation of our task. This tasks runs in an own thread - see the comments in the code.
    We can have as many cpp (and header files) as we need to structure our code.  
-   * [config.json](config.json)<br>
+   * [config.json](exampleConfig.json)<br>
      This file allows to add some config definitions that are needed for our task. For the possible options have a look at the global [config.json](../../web/config.json). Be careful not to overwrite config defitions from the global file. A good practice wood be to prefix the names of definitions with parts of the library name. Always put them in a separate category so that they do not interfere with the system ones.
-     The defined config items can later be accessed in the code (see the example in [GwExampleTask.cpp](GwExampleTask.cpp)).
+     The defined config items can later be accessed in the code (see the example in [GwExampleTask.cpp](GwExampleTask.cpp)).<br>
+     
+     Starting from Version 20250305 you should normally not use this file name any more as those configs would be added for all build environments. Instead define a parameter _custom_config_ in your [platformio.ini](platformio.ini) for the environments you would like to add some configurations for. This parameter accepts a list of file names (relative to the project root, separated by ,).
 
-   * [index.js](index.js)<br>
+   * [index.js](example.js)<br>
      You can add javascript code that will contribute to the UI of the system. The WebUI provides a small API that allows you to "hook" into some functions to include your own parts of the UI. This includes adding new tabs, modifying/replacing the data display items, modifying the status display or accessing the config items.
      For the API refer to [../../web/index.js](../../web/index.js#L2001).
      To start interacting just register for some events like api.EVENTS.init. You can check the capabilities you have defined to see if your task is active.
@@ -46,10 +48,52 @@ Files
      tools/testServer.py nnn http://x.x.x.x/api
      ```
      with nnn being the local port and x.x.x.x the address of a running system. Open `http://localhost:nnn` in your browser.<br>
-     After a change just start the compilation and reload the page.
+     After a change just start the compilation and reload the page.<br>
+     
+     Starting from Version 20250305 you should normally not use this file name any more as those js code would be added for all build environments. Instead define a parameter _custom_js_ in your [platformio.ini](platformio.ini) for the environments you would like to add the js code for. This parameter accepts a list of file names (relative to the project root, separated by ,). This will also allow you to skip the check for capabilities in your code.
 
    * [index.css](index.css)<br>
-     You can add own css to influence the styling of the display.
+     You can add own css to influence the styling of the display.<br>
+     
+     Starting from Version 20250305 you should normally not use this file name any more as those styles would be added for all build environments. Instead define a parameter _custom_css_ in your [platformio.ini](platformio.ini) for the environments you would like to add some styles for. This parameter accepts a list of file names (relative to the project root, separated by , or as multi line entry)
+
+   * [script.py](script.py)<br>
+     Starting from version 20251007 you can define a parameter "custom_script" in your [platformio.ini](platformio.ini).
+     This parameter can contain a list of file names (relative to the project root) that will be added as a [platformio extra script](https://docs.platformio.org/en/latest/scripting/index.html#scripting). The scripts will be loaded at the end of the main [extra_script](../../extra_script.py).
+     You can add code there that is specific for your build.
+     Example:
+     ```
+      # PlatformIO extra script for obp60task
+      epdtype = "unknown"
+      pcbvers = "unknown"
+      for x in env["BUILD_FLAGS"]:
+          if x.startswith("-D HARDWARE_"):
+              pcbvers = x.split('_')[1]
+          if x.startswith("-D DISPLAY_"):
+              epdtype = x.split('_')[1]
+
+      propfilename = os.path.join(env["PROJECT_LIBDEPS_DIR"], env     ["PIOENV"], "GxEPD2/library.properties")
+      properties = {}
+      with open(propfilename, 'r') as file:
+          for line in file:
+              match = re.match(r'^([^=]+)=(.*)$', line)
+              if match:
+                  key = match.group(1).strip()
+                  value = match.group(2).strip()
+                  properties[key] = value
+
+      gxepd2vers = "unknown"
+      try:
+          if properties["name"] == "GxEPD2":
+              gxepd2vers = properties["version"]
+      except:
+          pass
+
+      env["CPPDEFINES"].extend([("BOARD", env["BOARD"]), ("EPDTYPE",      epdtype), ("PCBVERS", pcbvers), ("GXEPD2VERS", gxepd2vers)])
+
+      print("added hardware info to CPPDEFINES")
+      print("friendly board name is '{}'".format(env.GetProjectOption     ("board_name")))
+     ```
 
 
  Interfaces
