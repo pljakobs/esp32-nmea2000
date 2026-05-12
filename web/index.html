@@ -114,6 +114,15 @@
       <span class="value status-version">---</span>
     </div>
     <div class="row">
+      <span class="label">Latest Release</span>
+      <span class="value" id="fwLatestStatus">not checked</span>
+    </div>
+    <div class="row">
+      <span class="label">Latest Asset</span>
+      <a class="value hidden" id="fwLatestAssetLink" href="#" target="_blank" rel="noopener noreferrer"></a>
+      <span class="value" id="fwLatestAssetText">---</span>
+    </div>
+    <div class="row">
       <span class="label">New Firmware</span>
       <input type="file" name="file1" id="uploadFile">
     </div>
@@ -125,6 +134,8 @@
       <div id="uploadDone"></div>
     </div>
     <div class="buttons">
+      <button id="checkLatestFw">Check Latest</button>
+      <button id="installLatestFw" disabled>Install Latest</button>
       <button id="uploadBin">Upload</button>
     </div>
   </div>

@@ -244,6 +244,22 @@ body {
   .buttons button{
     padding: 0.5em;
   }
+  #fwLatestAssetLink {
+    word-break: break-all;
+    max-width: 100%;
+  }
+  #fwLatestStatus.ok {
+    color: #0a7a0a;
+    font-weight: bold;
+  }
+  #fwLatestStatus.warn {
+    color: #9c6b00;
+    font-weight: bold;
+  }
+  #fwLatestStatus.err {
+    color: #a00000;
+    font-weight: bold;
+  }
   .overlayButtons button{
     padding: 0.5em;
     margin-left: 0.3em;

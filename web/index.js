@@ -1461,6 +1461,150 @@
             showOverlay(text, true);
         });
     }
+    let releaseRepoConfig = {
+        user: window.gitHubUser || "pljakobs",
+        repo: window.gitHubRepo || "esp32-nmea2000"
+    };
+    let latestFwInfo;
+    let lastFwCheckTs = 0;
+    function readStatusText(selector) {
+        let value = "";
+        forEl(selector, function (el) { value = (el.textContent || "").trim(); });
+        return value;
+    }
+    function setFwLatestStatus(text, clazz) {
+        let el = document.getElementById("fwLatestStatus");
+        if (!el) return;
+        el.textContent = text;
+        el.classList.remove("ok");
+        el.classList.remove("warn");
+        el.classList.remove("err");
+        if (clazz) el.classList.add(clazz);
+    }
+    function setFwLatestAsset(info) {
+        let link = document.getElementById("fwLatestAssetLink");
+        let text = document.getElementById("fwLatestAssetText");
+        if (!link || !text) return;
+        if (!info || !info.url) {
+            link.classList.add("hidden");
+            text.classList.remove("hidden");
+            text.textContent = "---";
+            link.removeAttribute("href");
+            link.textContent = "";
+            return;
+        }
+        link.classList.remove("hidden");
+        text.classList.add("hidden");
+        link.href = info.url;
+        link.textContent = info.name;
+    }
+    function parseVersionList(v) {
+        if (!v) return [];
+        let rt = [];
+        let parts = (v + "").match(/[0-9]+/g);
+        if (!parts) return rt;
+        for (let i = 0; i < parts.length; i++) {
+            rt.push(parseInt(parts[i]));
+        }
+        return rt;
+    }
+    function compareVersions(remoteV, currentV) {
+        let a = parseVersionList(remoteV);
+        let b = parseVersionList(currentV);
+        let maxl = Math.max(a.length, b.length);
+        for (let i = 0; i < maxl; i++) {
+            let av = a[i] || 0;
+            let bv = b[i] || 0;
+            if (av > bv) return 1;
+            if (av < bv) return -1;
+        }
+        if ((remoteV || "") === (currentV || "")) return 0;
+        return 0;
+    }
+    function findMatchingUpdateAsset(releaseJson, fwtype) {
+        if (!releaseJson || !releaseJson.assets || !(releaseJson.assets instanceof Array)) return;
+        let assets = releaseJson.assets;
+        let candidates = [];
+        for (let i = 0; i < assets.length; i++) {
+            let asset = assets[i];
+            if (!asset || !asset.name) continue;
+            if (!asset.name.match(/-update\.bin$/)) continue;
+            candidates.push(asset);
+        }
+        if (candidates.length < 1) return;
+        let cleanType = (fwtype || "").trim().toLowerCase();
+        if (cleanType) {
+            for (let i = 0; i < candidates.length; i++) {
+                let cn = candidates[i].name.toLowerCase();
+                if (cn.indexOf(cleanType) >= 0) return candidates[i];
+            }
+        }
+        return candidates[0];
+    }
+    function updateLatestInstallButton() {
+        let bt = document.getElementById("installLatestFw");
+        if (!bt) return;
+        bt.disabled = !latestFwInfo || !latestFwInfo.url;
+    }
+    function checkLatestFirmware(force) {
+        if (force !== true && (lastFwCheckTs + 60000) > (new Date()).getTime()) {
+            return Promise.resolve(latestFwInfo);
+        }
+        let fwtype = readStatusText(".status-fwtype");
+        let currentVersion = readStatusText(".status-version");
+        setFwLatestStatus("checking...", "");
+        setFwLatestAsset();
+        latestFwInfo = undefined;
+        updateLatestInstallButton();
+        let url = "https://api.github.com/repos/" + encodeURIComponent(releaseRepoConfig.user) + "/" +
+            encodeURIComponent(releaseRepoConfig.repo) + "/releases/latest";
+        return fetch(url)
+            .then(function (resp) {
+                if (!resp.ok) {
+                    throw new Error("release query failed: " + resp.status);
+                }
+                return resp.json();
+            })
+            .then(function (releaseJson) {
+                let asset = findMatchingUpdateAsset(releaseJson, fwtype);
+                if (!asset) {
+                    setFwLatestStatus("no matching update artifact", "warn");
+                    setFwLatestAsset();
+                    latestFwInfo = undefined;
+                    updateLatestInstallButton();
+                    return;
+                }
+                let remoteVersion = releaseJson.name || releaseJson.tag_name || "unknown";
+                let cmp = compareVersions(remoteVersion, currentVersion);
+                latestFwInfo = {
+                    name: asset.name,
+                    url: asset.browser_download_url,
+                    version: remoteVersion,
+                    fwtype: fwtype,
+                    currentVersion: currentVersion
+                };
+                setFwLatestAsset(latestFwInfo);
+                if (cmp > 0) {
+                    setFwLatestStatus("new version available: " + remoteVersion, "ok");
+                }
+                else if (cmp === 0) {
+                    setFwLatestStatus("up to date: " + remoteVersion, "warn");
+                }
+                else {
+                    setFwLatestStatus("release is older: " + remoteVersion, "warn");
+                }
+                updateLatestInstallButton();
+                lastFwCheckTs = (new Date()).getTime();
+                return latestFwInfo;
+            })
+            .catch(function (e) {
+                setFwLatestStatus("check failed", "err");
+                setFwLatestAsset();
+                latestFwInfo = undefined;
+                updateLatestInstallButton();
+                throw e;
+            });
+    }
     function handleTab(el) {
         let activeName = el.getAttribute('data-page');
         if (!activeName) {
@@ -1484,6 +1628,12 @@
      *
      * @param {number} coordinate
      * @param axis
+        if (activeName === 'updatePage') {
+            checkLatestFirmware(false)
+                .catch(function (e) {
+                    console.log("firmware check failed", e);
+                });
+        }
      * @returns {string}
      */
     function formatLonLatsDecimal(coordinate, axis) {
@@ -1850,14 +2000,11 @@
             });
         }
     }
-    buttonHandlers.uploadBin=function(ev) {
-        let el = document.getElementById("uploadFile");
+    function uploadFirmwareFile(file, buttonEl) {
         let progressEl = document.getElementById("uploadDone");
-        if (!el) return;
-        if (el.files.length < 1) return;
-        ev.target.disabled = true;
-        let file = el.files[0];
-        checkImageFile(file)
+        if (!file) return Promise.reject("missing file");
+        if (buttonEl) buttonEl.disabled = true;
+        return checkImageFile(file)
             .then(function (result) {
                 let currentType;
                 let currentVersion;
@@ -1883,65 +2030,114 @@
                     }
                 }
                 if (!confirm(confirmText)) {
-                    ev.target.disabled = false;
-                    return;
+                    throw new Error("user abort");
                 }
-                ensurePass()
+                return ensurePass()
                     .then(function (hash) {
-                        let len = file.size;
-                        let req = new XMLHttpRequest();
-                        req.onloadend = function () {
-                            ev.target.disabled = false;
-                            let result = "unknown error";
-                            try {
-                                let jresult = JSON.parse(req.responseText);
-                                if (jresult.status == 'OK') {
-                                    result = '';
+                        return new Promise(function (resolve, reject) {
+                            let req = new XMLHttpRequest();
+                            req.onloadend = function () {
+                                if (buttonEl) buttonEl.disabled = false;
+                                let result = "unknown error";
+                                try {
+                                    let jresult = JSON.parse(req.responseText);
+                                    if (jresult.status == 'OK') {
+                                        result = '';
+                                    }
+                                    else {
+                                        if (jresult.status) {
+                                            result = jresult.status;
+                                        }
+                                    }
+                                } catch (e) {
+                                    result = "Error " + req.status;
+                                }
+                                if (progressEl) {
+                                    progressEl.style.width = 0;
+                                }
+                                if (!result) {
+                                    alertRestart();
+                                    resolve();
                                 }
                                 else {
-                                    if (jresult.status) {
-                                        result = jresult.status;
-                                    }
+                                    alert("update error: " + result);
+                                    reject(new Error("upload error: " + result));
                                 }
-                            } catch (e) {
-                                result = "Error " + req.status;
+                            }
+                            req.onerror = function (e) {
+                                if (buttonEl) buttonEl.disabled = false;
+                                alert("unable to upload: " + e);
+                                reject(new Error("upload error: " + e));
                             }
                             if (progressEl) {
                                 progressEl.style.width = 0;
-                            }
-                            if (!result) {
-                                alertRestart();
-                            }
-                            else {
-                                alert("update error: " + result);
-                            }
-                        }
-                        req.onerror = function (e) {
-                            ev.target.disabled = false;
-                            alert("unable to upload: " + e);
-                        }
-                        if (progressEl) {
-                            progressEl.style.width = 0;
-                            req.upload.onprogress = function (ev) {
-                                if (ev.lengthComputable) {
-                                    let percent = 100 * ev.loaded / ev.total;
-                                    progressEl.style.width = percent + "%";
+                                req.upload.onprogress = function (ev) {
+                                    if (ev.lengthComputable) {
+                                        let percent = 100 * ev.loaded / ev.total;
+                                        progressEl.style.width = percent + "%";
+                                    }
                                 }
                             }
-                        }
-                        let formData = new FormData();
-                        formData.append("file1", el.files[0]);
-                        req.open("POST", '/api/update?_hash=' + encodeURIComponent(hash));
-                        req.send(formData);
+                            let formData = new FormData();
+                            formData.append("file1", file, file.name || "update.bin");
+                            req.open("POST", '/api/update?_hash=' + encodeURIComponent(hash));
+                            req.send(formData);
+                        });
                     })
                     .catch(function (e) {
-                        ev.target.disabled = false;
+                        if (buttonEl) buttonEl.disabled = false;
+                        throw e;
                     });
             })
             .catch(function (e) {
-                alert("This file is an invalid image file:\n" + e);
-                ev.target.disabled = false;
+                let errorText = e + "";
+                if (errorText.indexOf("upload error:") < 0 &&
+                    errorText !== "Error: user abort" &&
+                    errorText !== "user abort") {
+                    alert("This file is an invalid image file:\n" + e);
+                }
+                if (buttonEl) buttonEl.disabled = false;
+                throw e;
+            });
+    }
+    buttonHandlers.uploadBin=function(ev) {
+        let el = document.getElementById("uploadFile");
+        if (!el) return;
+        if (el.files.length < 1) return;
+        let file = el.files[0];
+        uploadFirmwareFile(file, ev.target)
+            .catch(function (e) {
+            });
+    }
+    buttonHandlers.checkLatestFw=function(ev) {
+        if (ev && ev.target) ev.target.disabled = true;
+        checkLatestFirmware(true)
+            .catch(function (e) {
+                alert("Unable to check latest firmware: " + e);
             })
+            .finally(function () {
+                if (ev && ev.target) ev.target.disabled = false;
+            });
+    }
+    buttonHandlers.installLatestFw=function(ev) {
+        if (!latestFwInfo || !latestFwInfo.url) return;
+        let buttonEl = (ev && ev.target) ? ev.target : undefined;
+        if (buttonEl) buttonEl.disabled = true;
+        fetch(latestFwInfo.url)
+            .then(function (resp) {
+                if (!resp.ok) {
+                    throw new Error("download failed: " + resp.status);
+                }
+                return resp.blob();
+            })
+            .then(function (blob) {
+                let file = new File([blob], latestFwInfo.name || "latest-update.bin", { type: "application/octet-stream" });
+                return uploadFirmwareFile(file, buttonEl);
+            })
+            .catch(function (e) {
+                alert("Unable to install latest firmware: " + e);
+                if (buttonEl) buttonEl.disabled = false;
+            });
     }
     let HDROFFSET = 288;
     let VERSIONOFFSET = 16;
