@@ -183,5 +183,231 @@
     "capabilities": {
       "imuhasmag": "true"
     }
+  },
+  {
+    "name": "icm20948gybx",
+    "label": "gyro X bias rad/s",
+    "type": "number",
+    "default": 0,
+    "description": "gyro X axis bias correction in rad/s",
+    "category": "calibration",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948gyby",
+    "label": "gyro Y bias rad/s",
+    "type": "number",
+    "default": 0,
+    "description": "gyro Y axis bias correction in rad/s",
+    "category": "calibration",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948acbx",
+    "label": "accel X bias m/s²",
+    "type": "number",
+    "default": 0,
+    "description": "accel X axis bias correction in m/s²",
+    "category": "calibration",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948acby",
+    "label": "accel Y bias m/s²",
+    "type": "number",
+    "default": 0,
+    "description": "accel Y axis bias correction in m/s²",
+    "category": "calibration",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948acbz",
+    "label": "accel Z bias m/s²",
+    "type": "number",
+    "default": 0,
+    "description": "accel Z axis bias correction in m/s²",
+    "category": "calibration",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948magbx",
+    "label": "mag X bias uT",
+    "type": "number",
+    "default": 0,
+    "description": "magnetometer X axis hard-iron bias correction in µT",
+    "category": "calibration",
+    "capabilities": {
+      "imuhasmag": "true"
+    }
+  },
+  {
+    "name": "icm20948magby",
+    "label": "mag Y bias uT",
+    "type": "number",
+    "default": 0,
+    "description": "magnetometer Y axis hard-iron bias correction in µT",
+    "category": "calibration",
+    "capabilities": {
+      "imuhasmag": "true"
+    }
+  },
+  {
+    "name": "icm20948magbz",
+    "label": "mag Z bias uT",
+    "type": "number",
+    "default": 0,
+    "description": "magnetometer Z axis hard-iron bias correction in µT",
+    "category": "calibration",
+    "capabilities": {
+      "imuhasmag": "true"
+    }
+  },
+  {
+    "name": "icm20948mounty",
+    "label": "mount yaw offset rad",
+    "type": "number",
+    "default": 0,
+    "description": "sensor-to-boat yaw mounting offset in radians",
+    "category": "calibration",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948mountp",
+    "label": "mount pitch offset rad",
+    "type": "number",
+    "default": 0,
+    "description": "sensor-to-boat pitch mounting offset in radians",
+    "category": "calibration",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948mountr",
+    "label": "mount roll offset rad",
+    "type": "number",
+    "default": 0,
+    "description": "sensor-to-boat roll mounting offset in radians",
+    "category": "calibration",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948q_on",
+    "label": "heading quality enable threshold",
+    "type": "number",
+    "default": 75,
+    "description": "heading output enabled above this quality score (0-100)",
+    "category": "calibration",
+    "min": 0,
+    "max": 100,
+    "check": "checkMinMax",
+    "capabilities": {
+      "imuhasmag": "true"
+    }
+  },
+  {
+    "name": "icm20948q_off",
+    "label": "heading quality disable threshold",
+    "type": "number",
+    "default": 50,
+    "description": "heading output disabled below this quality score (0-100)",
+    "category": "calibration",
+    "min": 0,
+    "max": 100,
+    "check": "checkMinMax",
+    "capabilities": {
+      "imuhasmag": "true"
+    }
+  },
+  {
+    "name": "icm20948udpen",
+    "label": "UDP output enable",
+    "type": "boolean",
+    "default": "false",
+    "description": "enable UDP streaming of raw and fused IMU data",
+    "category": "udp",
+    "capabilities": {
+      "icm20948": "true"
+    }
+  },
+  {
+    "name": "icm20948udpip",
+    "label": "UDP target IP",
+    "type": "string",
+    "default": "192.168.1.20",
+    "description": "IP address to send UDP IMU stream to",
+    "category": "udp",
+    "capabilities": {
+      "icm20948": "true"
+    },
+    "condition": {
+      "icm20948udpen": "true"
+    }
+  },
+  {
+    "name": "icm20948udppt",
+    "label": "UDP target port",
+    "type": "number",
+    "default": 5555,
+    "description": "UDP port to send IMU stream to",
+    "category": "udp",
+    "min": 1024,
+    "max": 65535,
+    "check": "checkMinMax",
+    "capabilities": {
+      "icm20948": "true"
+    },
+    "condition": {
+      "icm20948udpen": "true"
+    }
+  },
+  {
+    "name": "icm20948udpfmt",
+    "label": "UDP output format",
+    "type": "list",
+    "default": "0",
+    "description": "format for UDP output: JSON or Signal K",
+    "category": "udp",
+    "list": [
+      {"l": "JSON", "v": "0"},
+      {"l": "Signal K", "v": "1"}
+    ],
+    "capabilities": {
+      "icm20948": "true"
+    },
+    "condition": {
+      "icm20948udpen": "true"
+    }
+  },
+  {
+    "name": "icm20948udpiv",
+    "label": "UDP output interval ms",
+    "type": "number",
+    "default": 100,
+    "description": "interval for UDP output (use sensor interval if 0)",
+    "category": "udp",
+    "min": 0,
+    "max": 10000,
+    "check": "checkMinMax",
+    "capabilities": {
+      "icm20948": "true"
+    },
+    "condition": {
+      "icm20948udpen": "true"
+    }
   }
 ]
