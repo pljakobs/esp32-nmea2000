@@ -1,0 +1,64 @@
+[
+  {
+    "name": "dalyEnabled",
+    "label": "enable Daly task",
+    "type": "boolean",
+    "default": "false",
+    "description": "enable the Daly BLE battery monitor task",
+    "category": "daly"
+  },
+  {
+    "name": "dalyName",
+    "label": "battery name",
+    "type": "string",
+    "default": "DalyBattery",
+    "description": "label for the Daly battery monitor",
+    "category": "daly"
+  },
+  {
+    "name": "dalyMac",
+    "label": "BLE MAC",
+    "type": "string",
+    "default": "",
+    "description": "BLE MAC address of the Daly BMS",
+    "category": "daly"
+  },
+  {
+    "name": "dalyPollIntv",
+    "label": "poll interval",
+    "type": "number",
+    "default": 60000,
+    "min": 5000,
+    "max": 600000,
+    "check": "checkMinMax",
+    "description": "poll interval in milliseconds (minimum 5s, recommended 60s for 1 minute)",
+    "category": "daly"
+  },
+  {
+    "name": "dalyInst",
+    "label": "battery instance",
+    "type": "number",
+    "default": 0,
+    "min": 0,
+    "max": 255,
+    "check": "checkMinMax",
+    "description": "NMEA2000 battery instance id",
+    "category": "daly"
+  },
+  {
+    "name": "dalyDebug",
+    "label": "debug logging",
+    "type": "boolean",
+    "default": "false",
+    "description": "enable Daly task debug logs",
+    "category": "daly"
+  },
+  {
+    "name": "dalySocLog",
+    "label": "log state of charge",
+    "type": "boolean",
+    "default": "true",
+    "description": "enable internal logging of SoC for trending and analysis",
+    "category": "daly"
+  }
+]
