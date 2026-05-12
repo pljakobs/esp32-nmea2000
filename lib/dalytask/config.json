@@ -27,11 +27,11 @@
     "name": "dalyPollIntv",
     "label": "poll interval",
     "type": "number",
-    "default": 5000,
-    "min": 500,
-    "max": 60000,
+    "default": 60000,
+    "min": 5000,
+    "max": 600000,
     "check": "checkMinMax",
-    "description": "poll interval in milliseconds",
+    "description": "poll interval in milliseconds (minimum 5s, recommended 60s for 1 minute)",
     "category": "daly"
   },
   {
@@ -50,7 +50,15 @@
     "label": "debug logging",
     "type": "boolean",
     "default": "false",
-    "description": "enable placeholder Daly task debug logs",
+    "description": "enable Daly task debug logs",
+    "category": "daly"
+  },
+  {
+    "name": "dalySocLog",
+    "label": "log state of charge",
+    "type": "boolean",
+    "default": "true",
+    "description": "enable internal logging of SoC for trending and analysis",
     "category": "daly"
   }
 ]
