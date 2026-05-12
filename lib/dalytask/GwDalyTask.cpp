@@ -141,6 +141,23 @@ void runDalyTask(GwApi *api) {
         api->sendN2kMessage(msg);
         api->increment(counterId, "127508");
 
+        // Publish SoC via PGN 127506 (DC Detailed Status) when valid.
+        if (std::isfinite(packData.soc_pct) && packData.soc_pct >= 0.0f && packData.soc_pct <= 100.0f) {
+            const unsigned char soc = (unsigned char)lroundf(packData.soc_pct);
+            tN2kMsg dcMsg;
+            SetN2kDCStatus(dcMsg,
+                           sid++,
+                           instance,
+                           N2kDCt_Battery,
+                           soc,
+                           0xFF,            // SoH unknown
+                           N2kDoubleNA,     // time remaining unknown
+                           N2kDoubleNA,     // ripple unknown
+                           N2kDoubleNA);    // capacity unknown
+            api->sendN2kMessage(dcMsg);
+            api->increment(counterId, "127506");
+        }
+
         // SoC is decoded and reported in logs for monitoring/analytics.
         if ((debug || socLog) && std::isfinite(packData.soc_pct) && packData.soc_pct >= 0 && packData.soc_pct <= 100) {
             LOG_DEBUG(debug ? GwLog::DEBUG : GwLog::LOG, "daly: SoC = %.1f%%", packData.soc_pct);
