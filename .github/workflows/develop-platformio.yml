@@ -1,0 +1,62 @@
+name: Develop PlatformIO Build
+
+on:
+  push:
+    branches: [ develop ]
+  pull_request:
+    branches: [ develop ]
+
+jobs:
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load board matrix definition
+        id: matrix
+        run: |
+          echo "matrix=$(python3 - <<'PY'
+import json
+with open('.github/board-matrix.json', 'r', encoding='utf-8') as f:
+    data = json.load(f)
+print(json.dumps(data))
+PY
+          )" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: 1
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip + PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio
+          key: ${{ runner.os }}-pio-${{ hashFiles('platformio.ini', 'lib/**/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-
+
+      - name: Install PlatformIO
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -U platformio
+
+      - name: Build ${{ matrix.name }} (${{ matrix.env }})
+        run: pio run -e ${{ matrix.env }}

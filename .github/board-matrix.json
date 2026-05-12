@@ -1,0 +1,8 @@
+{
+  "include": [
+    {
+      "env": "nodemcu-pj",
+      "name": "NodeMCU PJ"
+    }
+  ]
+}
