@@ -1655,7 +1655,9 @@
             f: function (v) {
                 let x = parseInt(v);
                 if (isNaN(x)) return 'LEARN';
-                return x > 0 ? 'STABLE' : 'LEARN';
+                let count = x & 0xFF;           // bits 0-7 = count
+                let isStable = (x & 0x0100) !== 0;  // bit 8 = stable flag
+                return isStable ? 'STABLE' : ('LEARN-' + count);
             },
             u: ''
         }

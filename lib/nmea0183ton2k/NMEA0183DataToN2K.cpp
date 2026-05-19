@@ -110,7 +110,11 @@ private:
         return 0;
     }
     void updateLearnState(int sourceId) {
-        int16_t nextState = (acceptedTacks >= STABLE_TACKS_REQUIRED) ? 1 : 0;
+        // Encode state: bits 0-7 = tack count, bit 8 = stable flag
+        int16_t nextState = acceptedTacks & 0xFF;
+        if (acceptedTacks >= STABLE_TACKS_REQUIRED) {
+            nextState |= 0x0100;  // Set bit 8 for stable flag
+        }
         if (nextState != awaCorrState) {
             awaCorrState = nextState;
         }
@@ -653,9 +657,6 @@ private:
         GwConverterConfig::WindMapping mapping;
         switch(Reference){
             case NMEA0183Wind_Apparent:
-                WindAngle+=(double)180;
-                while(WindAngle>360) {WindAngle-=360;}
-                while(WindAngle<0) {WindAngle+=360;}
                 WindAngle=formatDegToRad(WindAngle);
                 WindAngle=learnAndCorrectAwa(WindAngle,WindSpeed,msg.sourceId);
                 shouldSend=updateDouble(boatData->AWA,WindAngle,msg.sourceId) && 
