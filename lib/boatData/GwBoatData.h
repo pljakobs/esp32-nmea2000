@@ -209,6 +209,7 @@ class GwBoatData{
     GWBOATDATA(double,AWA,formatWind) // apparent wind ANGLE
     GWBOATDATAT(double,AWACorr,GwBoatItemBase::TOType::keep,formatWind) // learned apparent wind correction
     GWBOATDATAT(int16_t,AWACorrState,GwBoatItemBase::TOType::keep,formatLearnState) // 0=LEARN,1=STABLE
+    GWBOATDATAT(double,TackAngle,GwBoatItemBase::TOType::keep,formatWind) // detected tack angle from stable before/after legs
     GWBOATDATA(double,AWS,formatKnots) // apparent wind speed
     GWBOATDATAT(double,MaxAws,GwBoatItemBase::TOType::keep,formatKnots)
     GWBOATDATA(double,TWD,formatCourse) // true wind DIRECTION

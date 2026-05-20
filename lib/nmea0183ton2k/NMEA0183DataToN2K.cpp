@@ -48,7 +48,6 @@ private:
     class StableLeg {
     public:
         bool valid=false;
-        int side=0;
         unsigned long firstMs=0;
         unsigned long lastMs=0;
         int count=0;
@@ -61,11 +60,15 @@ private:
     StableLeg currentLeg;
     StableLeg previousLeg;
     bool tackInProgress=false;
-    int tackToSide=0;
     unsigned long tackNewSideStableSince=0;
     unsigned long tackStartMs=0;
     double tackStartHeading=N2kDoubleNA;
     double maxTackHeadingDelta=0;
+    double maxTackTurnRate=0;
+    double tackPeakAbsAwa=0;
+    double tackSettledStartAbsAwa=N2kDoubleNA;
+    double tackSettledLastAbsAwa=N2kDoubleNA;
+    int tackSettledSamples=0;
 
     bool headingSampleValid=false;
     double lastHeading=N2kDoubleNA;
@@ -78,16 +81,21 @@ private:
 
     static constexpr int STABLE_TACKS_REQUIRED = 3;
 
-    static constexpr double SIDE_DEADBAND_RAD = (10.0 * M_PI) / 180.0;
     static constexpr double MAX_STABLE_TURN_RATE_RAD_S = (4.0 * M_PI) / 180.0;
+    static constexpr double MIN_TACK_TRIGGER_TURN_RATE_RAD_S = (8.0 * M_PI) / 180.0;
     static constexpr double MIN_TACK_ANGLE_RAD = (90.0 * M_PI) / 180.0;
     static constexpr double MAX_TACK_ANGLE_RAD = (150.0 * M_PI) / 180.0;
     static constexpr double MAX_CORR_RESIDUAL_RAD = (20.0 * M_PI) / 180.0;
     static constexpr double SYMMETRY_SCALE_RAD = (30.0 * M_PI) / 180.0;
+    static constexpr double MIN_TACK_PEAK_AWA_RAD = (100.0 * M_PI) / 180.0;
+    static constexpr double MIN_TACK_SETTLED_AWA_RAD = (85.0 * M_PI) / 180.0;
+    static constexpr double MAX_TACK_SETTLED_AWA_RAD = (110.0 * M_PI) / 180.0;
+    static constexpr double MIN_TACK_NARROWING_RAD = (8.0 * M_PI) / 180.0;
     static constexpr double MIN_AWS_M_S = 1.5; // ~3 kn
     static constexpr unsigned long MIN_STABLE_LEG_MS = 120000;
     static constexpr unsigned long SETTLE_AFTER_TACK_MS = 30000;
     static constexpr unsigned long MAX_TACK_TIME_MS = 180000;
+    static constexpr unsigned long MAX_SWIFT_TURN_MS = 60000;
     static constexpr int MIN_STABLE_SAMPLES = 30;
 
     static double wrapPi(double v) {
@@ -103,12 +111,6 @@ private:
     static double circMean(double a, double b) {
         return atan2(sin(a) + sin(b), cos(a) + cos(b));
     }
-    static int sideFromAwa(double awa) {
-        double signedAwa = wrapPi(awa);
-        if (signedAwa > SIDE_DEADBAND_RAD) return 1;
-        if (signedAwa < -SIDE_DEADBAND_RAD) return -1;
-        return 0;
-    }
     void updateLearnState(int sourceId) {
         // Encode state: bits 0-7 = tack count, bit 8 = stable flag
         int16_t nextState = acceptedTacks & 0xFF;
@@ -121,9 +123,8 @@ private:
         boatData->AWACorrState->update(awaCorrState, sourceId);
     }
 
-    void resetLeg(StableLeg &leg, int side, unsigned long now) {
+    void resetLeg(StableLeg &leg, unsigned long now) {
         leg.valid = true;
-        leg.side = side;
         leg.firstMs = now;
         leg.lastMs = now;
         leg.count = 0;
@@ -152,14 +153,15 @@ private:
     double legMeanAwa(const StableLeg &leg) const {
         return atan2(leg.sumAy, leg.sumAx);
     }
-    bool isHeadingStable(double heading, unsigned long now) {
+    bool isHeadingStable(double heading, unsigned long now, double &turnRate) {
+        turnRate = 0;
         bool stable = true;
         if (headingSampleValid) {
             unsigned long dtMs = now - lastHeadingMs;
             if (dtMs > 0) {
                 double dH = wrapPi(heading - lastHeading);
-                double rate = fabs(dH) / (((double)dtMs) / 1000.0);
-                stable = rate <= MAX_STABLE_TURN_RATE_RAD_S;
+                turnRate = fabs(dH) / (((double)dtMs) / 1000.0);
+                stable = turnRate <= MAX_STABLE_TURN_RATE_RAD_S;
             }
         }
         headingSampleValid = true;
@@ -173,6 +175,7 @@ private:
         double h2 = legMeanHeading(after);
         double tackAngle = fabs(wrapPi(h2 - h1));
         if (tackAngle < MIN_TACK_ANGLE_RAD || tackAngle > MAX_TACK_ANGLE_RAD) return;
+        boatData->TackAngle->update(tackAngle, sourceId);
 
         double a1 = legMeanAwa(before);
         double a2 = legMeanAwa(after);
@@ -206,6 +209,7 @@ private:
 
     double learnAndCorrectAwa(double rawAwa, double aws, int sourceId) {
         unsigned long now = millis();
+        double absAwa = fabs(wrapPi(rawAwa));
         updateLearnState(sourceId);
         if (!learnedAwaCorrValid && boatData->AWACorr->isValid(now)) {
             learnedAwaCorr = boatData->AWACorr->getData();
@@ -217,50 +221,42 @@ private:
         }
 
         double heading = boatData->HDT->getData();
-        bool stableHeading = isHeadingStable(heading, now);
-        int side = sideFromAwa(rawAwa);
-        if (side == 0) {
-            return learnedAwaCorrValid ? wrap2Pi(rawAwa - learnedAwaCorr) : rawAwa;
-        }
+        double headingTurnRate = 0;
+        bool stableHeading = isHeadingStable(heading, now, headingTurnRate);
 
         if (!currentLeg.valid) {
-            resetLeg(currentLeg, side, now);
+            resetLeg(currentLeg, now);
         }
 
         if (!tackInProgress) {
-            if (side == currentLeg.side) {
-                if (stableHeading) {
-                    addLegSample(currentLeg, heading, rawAwa, now);
-                }
-            } else {
-                if (legIsUsable(currentLeg)) {
-                    previousLeg = currentLeg;
-                    tackInProgress = true;
-                    tackToSide = side;
-                    tackStartMs = now;
-                    tackStartHeading = heading;
-                    maxTackHeadingDelta = 0;
-                    tackNewSideStableSince = stableHeading ? now : 0;
-                    resetLeg(currentLeg, side, now);
-                } else {
-                    resetLeg(currentLeg, side, now);
-                }
+            if (stableHeading) {
+                addLegSample(currentLeg, heading, rawAwa, now);
+            } else if (legIsUsable(currentLeg) && headingTurnRate >= MIN_TACK_TRIGGER_TURN_RATE_RAD_S) {
+                // Start tack candidate on a fast, distinct turn, independent of AWA side sign.
+                previousLeg = currentLeg;
+                tackInProgress = true;
+                tackStartMs = now;
+                tackStartHeading = heading;
+                maxTackHeadingDelta = 0;
+                maxTackTurnRate = headingTurnRate;
+                tackPeakAbsAwa = absAwa;
+                tackSettledStartAbsAwa = N2kDoubleNA;
+                tackSettledLastAbsAwa = N2kDoubleNA;
+                tackSettledSamples = 0;
+                tackNewSideStableSince = 0;
+                resetLeg(currentLeg, now);
             }
         } else {
             if (tackStartHeading != N2kDoubleNA) {
                 double d = fabs(wrapPi(heading - tackStartHeading));
                 if (d > maxTackHeadingDelta) maxTackHeadingDelta = d;
             }
+            if (headingTurnRate > maxTackTurnRate) maxTackTurnRate = headingTurnRate;
+            if (absAwa > tackPeakAbsAwa) tackPeakAbsAwa = absAwa;
 
             if ((now - tackStartMs) > MAX_TACK_TIME_MS) {
                 tackInProgress = false;
-                resetLeg(currentLeg, side, now);
-                return learnedAwaCorrValid ? wrap2Pi(rawAwa - learnedAwaCorr) : rawAwa;
-            }
-
-            if (side != tackToSide) {
-                tackNewSideStableSince = 0;
-                resetLeg(currentLeg, side, now);
+                resetLeg(currentLeg, now);
                 return learnedAwaCorrValid ? wrap2Pi(rawAwa - learnedAwaCorr) : rawAwa;
             }
 
@@ -271,11 +267,22 @@ private:
 
             if (tackNewSideStableSince == 0) tackNewSideStableSince = now;
             if ((now - tackNewSideStableSince) >= SETTLE_AFTER_TACK_MS) {
+                if (tackSettledStartAbsAwa == N2kDoubleNA) tackSettledStartAbsAwa = absAwa;
+                tackSettledLastAbsAwa = absAwa;
+                tackSettledSamples++;
                 addLegSample(currentLeg, heading, rawAwa, now);
             }
 
             if (legIsUsable(currentLeg)) {
-                if (maxTackHeadingDelta >= MIN_TACK_ANGLE_RAD) {
+                bool swiftTurn = (tackNewSideStableSince > 0) &&
+                                 ((tackNewSideStableSince - tackStartMs) <= MAX_SWIFT_TURN_MS) &&
+                                 (maxTackTurnRate >= MIN_TACK_TRIGGER_TURN_RATE_RAD_S);
+                bool awaFingerprint = (tackSettledSamples > 0) &&
+                                      (tackPeakAbsAwa >= MIN_TACK_PEAK_AWA_RAD) &&
+                                      (tackSettledLastAbsAwa >= MIN_TACK_SETTLED_AWA_RAD) &&
+                                      (tackSettledLastAbsAwa <= MAX_TACK_SETTLED_AWA_RAD) &&
+                                      ((tackPeakAbsAwa - tackSettledLastAbsAwa) >= MIN_TACK_NARROWING_RAD);
+                if (swiftTurn && awaFingerprint && maxTackHeadingDelta >= MIN_TACK_ANGLE_RAD) {
                     applyLearnedTackCorrection(previousLeg, currentLeg, sourceId);
                 }
                 tackInProgress = false;
